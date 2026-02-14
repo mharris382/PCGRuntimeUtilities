@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/World.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Tests/AutomationCommon.h"
 
 /**
@@ -17,10 +18,8 @@ public:
         UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
         FWorldContext& WorldContext = GEngine->CreateNewWorldContext(EWorldType::Game);
         WorldContext.SetCurrentWorld(World);
-        
         World->InitializeActorsForPlay(FURL());
         World->BeginPlay();
-        
         return World;
     }
     
@@ -33,6 +32,36 @@ public:
             World->DestroyWorld(false);
         }
     }
+
+    /** Create populated ISM component for testing */
+    static UISMRuntimeComponent* CreateTestComponent(
+        UWorld* World,
+        int32 NumInstances,
+        float Spacing = 1000.0f)
+    {
+        AActor* TestActor = World->SpawnActor<AActor>();
+        UISMRuntimeComponent* ISMRuntime = NewObject<UISMRuntimeComponent>(TestActor);
+        UInstancedStaticMeshComponent* ISM = NewObject<UInstancedStaticMeshComponent>(TestActor);
+		ISMRuntime->ManagedISMComponent = ISM;
+		ISMRuntime->RegisterComponent();
+        ISM->RegisterComponent();
+
+        // Add instances in a grid
+        for (int32 i = 0; i < NumInstances; i++)
+        {
+            FTransform Transform;
+            Transform.SetLocation(FVector(
+                (i % 10) * Spacing,
+                (i / 10) * Spacing,
+                0.0f
+            ));
+            ISM->AddInstance(Transform);
+        }
+        ISMRuntime->InitializeInstances();
+
+        return ISMRuntime;
+    }
+
     
     /** Create populated ISM component for testing */
     static UInstancedStaticMeshComponent* CreateTestISMComponent(

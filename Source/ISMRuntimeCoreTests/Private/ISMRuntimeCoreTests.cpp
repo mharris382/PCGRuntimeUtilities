@@ -5,11 +5,11 @@
 
 #define LOCTEXT_NAMESPACE "FISMRuntimeCoreTestsModule"
 
-void FISMRuntimeCoreModuleTests::StartupModule()
+void FISMRuntimeCoreTestsModule::StartupModule()
 {
 }
 
-void FISMRuntimeCoreModuleTests::ShutdownModule()
+void FISMRuntimeCoreTestsModule::ShutdownModule()
 {
 }
 

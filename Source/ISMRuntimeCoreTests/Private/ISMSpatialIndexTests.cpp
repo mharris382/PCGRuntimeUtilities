@@ -5,7 +5,7 @@
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FISMSpatialIndexBasicTest,
     "ISMRuntime.Core.SpatialIndex.BasicOperations",
-    EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::ProgramContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FISMSpatialIndexBasicTest::RunTest(const FString& Parameters)
@@ -28,7 +28,7 @@ bool FISMSpatialIndexBasicTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FISMSpatialIndexQueryTest,
     "ISMRuntime.Core.SpatialIndex.RadiusQuery",
-    EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::ProgramContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FISMSpatialIndexQueryTest::RunTest(const FString& Parameters)
@@ -59,7 +59,7 @@ bool FISMSpatialIndexQueryTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FISMSpatialIndexRemoveTest,
     "ISMRuntime.Core.SpatialIndex.RemoveInstance",
-    EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::ProgramContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FISMSpatialIndexRemoveTest::RunTest(const FString& Parameters)
@@ -88,7 +88,7 @@ bool FISMSpatialIndexRemoveTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FISMSpatialIndexUpdateTest,
     "ISMRuntime.Core.SpatialIndex.UpdateInstance",
-    EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::ProgramContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FISMSpatialIndexUpdateTest::RunTest(const FString& Parameters)
@@ -120,7 +120,7 @@ bool FISMSpatialIndexUpdateTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FISMSpatialIndexEdgeCaseTest,
     "ISMRuntime.Core.SpatialIndex.EdgeCases",
-    EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::ProgramContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FISMSpatialIndexEdgeCaseTest::RunTest(const FString& Parameters)
@@ -153,7 +153,7 @@ bool FISMSpatialIndexEdgeCaseTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FISMSpatialIndexCellBoundaryTest,
     "ISMRuntime.Core.SpatialIndex.CellBoundaries",
-    EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::ProgramContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FISMSpatialIndexCellBoundaryTest::RunTest(const FString& Parameters)
@@ -182,7 +182,7 @@ bool FISMSpatialIndexCellBoundaryTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FISMSpatialIndexPerformanceTest,
     "ISMRuntime.Core.SpatialIndex.Performance.LargeDataset",
-    EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::ProgramContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FISMSpatialIndexPerformanceTest::RunTest(const FString& Parameters)

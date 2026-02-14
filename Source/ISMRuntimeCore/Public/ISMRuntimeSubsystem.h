@@ -53,7 +53,7 @@ public:
     // ===== Component Registration =====
     
     /** Register a runtime component with this subsystem */
-    void RegisterRuntimeComponent(UISMRuntimeComponent* Component);
+    bool RegisterRuntimeComponent(UISMRuntimeComponent* Component);
     
     /** Unregister a runtime component from this subsystem */
     void UnregisterRuntimeComponent(UISMRuntimeComponent* Component);
@@ -67,8 +67,8 @@ public:
     TArray<UISMRuntimeComponent*> GetComponentsWithTag(FGameplayTag Tag) const;
     
     /** Get components implementing a specific interface */
-    template<typename InterfaceType>
-    TArray<UISMRuntimeComponent*> GetComponentsWithInterface() const;
+/*    template<typename InterfaceType>
+    TArray<UISMRuntimeComponent*> GetComponentsWithInterface() const;*/
     
     // ===== Global Queries =====
     

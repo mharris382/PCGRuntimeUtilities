@@ -13,6 +13,7 @@ public class ISMRuntimeCoreTests : ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
+            "GameplayTags",
             "ISMRuntimeCore"
         });
         

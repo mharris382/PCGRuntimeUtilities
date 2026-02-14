@@ -7,18 +7,18 @@
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FISMQueryFilterTagTest,
     "ISMRuntime.Core.QueryFilter.GameplayTags",
-    EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ServerContext | EAutomationTestFlags::CommandletContext | EAutomationTestFlags::ProgramContext | EAutomationTestFlags::ProductFilter
 )
 
 bool FISMQueryFilterTagTest::RunTest(const FString& Parameters)
 {
     // ARRANGE
     FISMQueryFilter Filter;
-    Filter.RequiredTags.AddTag(FGameplayTag::RequestGameplayTag("ISM.Type.Tree"));
+    Filter.RequiredTags.AddTag(FGameplayTag::RequestGameplayTag("ISM.Type.Vegetation.Tree"));
     Filter.ExcludedTags.AddTag(FGameplayTag::RequestGameplayTag("ISM.State.Destroyed"));
     
     UISMRuntimeComponent* Component = NewObject<UISMRuntimeComponent>();
-    Component->ISMComponentTags.AddTag(FGameplayTag::RequestGameplayTag("ISM.Type.Tree"));
+    Component->ISMComponentTags.AddTag(FGameplayTag::RequestGameplayTag("ISM.Type.Vegetation.Tree"));
     
     // ACT & ASSERT - Component passes filter
     TestTrue("Component should pass filter", Filter.PassesComponentFilter(Component));

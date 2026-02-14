@@ -37,7 +37,7 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FOnInstanceDestroyedNative, class UISMRunti
  * 
  * All specialized ISM features (damage, resources, physics) inherit from this.
  */
-UCLASS(Abstract, Blueprintable, ClassGroup=(ISMRuntime), meta=(BlueprintSpawnableComponent))
+UCLASS(Blueprintable, ClassGroup=(ISMRuntime), meta=(BlueprintSpawnableComponent))
 class ISMRUNTIMECORE_API UISMRuntimeComponent : public UActorComponent, public IISMStateProvider
 {
     GENERATED_BODY()
@@ -65,6 +65,7 @@ public:
     /** Cell size for spatial indexing (defaults to 1000cm = 10m) */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime|Performance", meta = (ClampMin = "100.0"))
     float SpatialIndexCellSize = 1000.0f;
+
 #pragma endregion
 
     
@@ -119,49 +120,121 @@ public:
 
                     /** Initialize all instances (called automatically on BeginPlay) */
     UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    virtual void InitializeInstances();
+    virtual bool InitializeInstances();
 
-    /** Destroy an instance (hides it and marks as destroyed, but index remains valid) */
+
+    
+
+
+    /**
+     * Hide an instance without destroying it.
+     * @param InstanceIndex The instance to hide
+     * @param bUpdateBounds Whether to recalculate bounds after hiding (expensive O(n) operation)
+     */
     UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    virtual void DestroyInstance(int32 InstanceIndex);
+    virtual void HideInstance(int32 InstanceIndex, bool bUpdateBounds = false);
 
-    /** Hide an instance without destroying it */
+    /**
+     * Show a previously hidden instance.
+     * @param InstanceIndex The instance to show
+     * @param bUpdateBounds Whether to recalculate bounds after showing (expensive O(n) operation)
+     */
     UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    virtual void HideInstance(int32 InstanceIndex);
+    virtual void ShowInstance(int32 InstanceIndex, bool bUpdateBounds = false);
 
-    /** Show a previously hidden instance */
-    UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    virtual void ShowInstance(int32 InstanceIndex);
 
-    /** Check if an instance is destroyed */
-    UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    bool IsInstanceDestroyed(int32 InstanceIndex) const;
+    
+            /**
+             * Update instance transform.
+             * @param InstanceIndex The instance to update
+             * @param NewTransform New transform for the instance
+             * @param bUpdateSpatialIndex Whether to update spatial index (default true)
+             * @param bUpdateBounds Whether to recalculate bounds (expensive O(n) operation, default false)
+             */
+            UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
+            virtual void UpdateInstanceTransform(int32 InstanceIndex, const FTransform& NewTransform, 
+                bool bUpdateSpatialIndex = true, bool bUpdateBounds = false);
+        
+          /**
+            * Destroy an instance (hides it and marks as destroyed, but index remains valid).
+            * @param InstanceIndex The instance to destroy
+            * @param bUpdateBounds Whether to recalculate bounds after destruction (expensive O(n) operation)
+            */
+            UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
+            virtual void DestroyInstance(int32 InstanceIndex, bool bUpdateBounds = false);
 
-    /** Check if an instance is active (not destroyed, collected, or hidden) */
-    UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    bool IsInstanceActive(int32 InstanceIndex) const;
+            /**
+             * Batch destroy multiple instances efficiently.
+             * Only recalculates bounds once at the end if requested.
+             * @param InstanceIndices Array of instance indices to destroy
+             * @param bUpdateBounds Whether to recalculate bounds after all destructions (one O(n) operation)
+             */
+            UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
+            void BatchDestroyInstances(const TArray<int32>& InstanceIndices, bool bUpdateBounds = false);
 
-    /** Get total number of instances (including destroyed ones) */
-    UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    int32 GetInstanceCount() const;
 
-    /** Get number of active instances (excludes destroyed) */
-    UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    int32 GetActiveInstanceCount() const;
+           // ===== Instance Creation =====
 
-    // ===== Transform Access =====
+           /**
+            * Add a new instance to the managed ISM component.
+            * Automatically initializes state, adds to spatial index, and optionally updates bounds.
+            * @param Transform World transform for the new instance
+            * @param bUpdateBounds Whether to expand bounds to include new instance (O(1) operation)
+            * @return Index of the newly added instance, or INDEX_NONE if failed
+            */
+        UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
+        int32 AddInstance(const FTransform& Transform, bool bUpdateBounds = true);
 
-    /** Get instance transform */
-    UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    FTransform GetInstanceTransform(int32 InstanceIndex) const;
+        /**
+         * Add multiple instances efficiently in a batch.
+         * Much faster than calling AddInstance in a loop.
+         * @param Transforms Array of world transforms for new instances
+         * @param bUpdateBounds Whether to update bounds after adding all instances (single O(1) operation)
+         * @return Array of indices for newly added instances (INDEX_NONE for any that failed)
+         */
+        UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
+        TArray<int32> BatchAddInstances(const TArray<FTransform>& Transforms, bool bUpdateBounds = true, bool bShouldReturnIndices = true, bool bUpdateNavigation = false);
 
-    /** Get instance world location */
-    UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    FVector GetInstanceLocation(int32 InstanceIndex) const;
+        /**
+         * Add instances with custom data.
+         * Useful for setting per-instance material parameters.
+         * @param Transform World transform for the new instance
+         * @param CustomData Per-instance custom data for materials
+         * @param bUpdateBounds Whether to expand bounds to include new instance
+         * @return Index of the newly added instance, or INDEX_NONE if failed
+         */
+        UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
+        int32 AddInstanceWithCustomData(const FTransform& Transform, const TArray<float>& CustomData, bool bUpdateBounds = true);
 
-    /** Update instance transform */
-    UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    virtual void UpdateInstanceTransform(int32 InstanceIndex, const FTransform& NewTransform, bool bUpdateSpatialIndex = true);
+
+
+
+        // ===== Instance Queries =====
+
+        UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
+        bool IsInstanceDestroyed(int32 InstanceIndex) const;
+    
+        /** Check if an instance is active (not destroyed, collected, or hidden) */
+        UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
+        bool IsInstanceActive(int32 InstanceIndex) const;
+    
+        /** Get total number of instances (including destroyed ones) */
+        UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
+        int32 GetInstanceCount() const;
+    
+        /** Get number of active instances (excludes destroyed) */
+        UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
+        int32 GetActiveInstanceCount() const;
+    
+        // ===== Transform Access =====
+    
+        /** Get instance transform */
+        UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
+        FTransform GetInstanceTransform(int32 InstanceIndex) const;
+    
+        /** Get instance world location */
+        UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
+        FVector GetInstanceLocation(int32 InstanceIndex) const;
 #pragma endregion
 
     
@@ -217,7 +290,16 @@ public:
     bool IsInstanceConverted(int32 InstanceIndex) const;
 
 #pragma endregion
+    
+    // ===== Custom Data =====
 
+    TArray<float> GetInstanceCustomData(int32 InstanceIndex) const;
+
+    void SetInstanceCustomData(int32 InstanceIndex, const TArray<float>& CustomData);
+
+    float GetInstanceCustomDataValue(int32 InstanceIndex, int32 DataIndex) const;
+
+    void SetInstanceCustomDataValue(int32 InstanceIndex, int32 DataIndex, float Value);
 
     // ===== Events =====
 #pragma region EVENTS
@@ -259,6 +341,10 @@ public:
     
     UPROPERTY(EditAnywhere, Category = "ISM Runtime|Performance", meta=(EditCondition="bEnableTickOptimization"))
     float TickInterval = 0.0f; // 0 = every frame
+
+
+    // ===== Accessors =====
+	bool IsISMInitialized() const { return bIsInitialized; }
     
 protected:
     // ===== Subclass Hooks =====
@@ -285,7 +371,7 @@ protected:
 #pragma region SUBSYSTEM_INTEGRATION
 
                     /** Register this component with the runtime subsystem */
-    virtual void RegisterWithSubsystem();
+    virtual bool RegisterWithSubsystem();
 
     /** Unregister this component from the runtime subsystem */
     virtual void UnregisterFromSubsystem();
@@ -336,4 +422,66 @@ protected:
 
     /** Get or create a handle for an instance */
     FISMInstanceHandle& GetOrCreateHandle(int32 InstanceIndex);
+
+    // ===== Bounds Management =====
+public:
+    
+    /**
+     * Recalculate bounds from all active instances.
+     * O(n) operation - use sparingly!
+     * Called automatically during initialization.
+     */
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Bounds")
+    void RecalculateInstanceBounds();
+    
+    /**
+     * Incrementally expand bounds to include a new location.
+     * O(1) operation - safe to call frequently.
+     * Does NOT shrink bounds if location is inside existing bounds.
+     */
+    void ExpandBoundsToInclude(const FVector& Location);
+    
+    /**
+     * Invalidate bounds cache, forcing recalculation on next query.
+     * Use when you know bounds have changed but don't want to recalculate immediately.
+     */
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Bounds")
+    void InvalidateBounds() { bBoundsValid = false; }
+
+
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Bounds")
+	bool IsBoundsValid() const { return bBoundsValid; }
+    
+protected:
+    /** Cached bounds of all active instances */
+    UPROPERTY(BlueprintReadOnly, Category = "ISM Runtime|Bounds")
+    FBox CachedInstanceBounds;
+    
+    /** Whether cached bounds are currently valid */
+    bool bBoundsValid = false;
+    
+    /** Padding to add to bounds (accounts for instance size/scale) */
+    UPROPERTY(EditAnywhere, Category = "ISM Runtime|Performance", meta=(ClampMin="0.0"))
+    float BoundsPadding = 100.0f;
+    
+    /** 
+     * Check if a location is on the edge of the bounds.
+     * Used to determine if removing an instance requires full bounds recalculation.
+     */
+    bool IsLocationOnBoundsEdge(const FVector& Location, float Tolerance = 10.0f) const;
+
+
+
+    protected:
+        /**
+         * Initialize state for a newly added instance.
+         * Called automatically by AddInstance.
+         */
+        virtual void InitializeNewInstance(int32 InstanceIndex, const FTransform& Transform);
+
+        /**
+         * Hook for subclasses to customize new instance initialization.
+         * Called after state is initialized but before spatial index update.
+         */
+        virtual void OnInstanceAdded(int32 InstanceIndex, const FTransform& Transform);
 };

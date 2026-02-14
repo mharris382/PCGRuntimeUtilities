@@ -3,7 +3,7 @@
 
 #include "Modules/ModuleManager.h"
 
-class FISMRuntimeCoreModuleTests : public IModuleInterface
+class FISMRuntimeCoreTestsModule : public IModuleInterface
 {
 public:
 

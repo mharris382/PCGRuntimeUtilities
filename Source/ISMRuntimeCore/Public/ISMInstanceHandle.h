@@ -60,12 +60,6 @@ struct ISMRUNTIMECORE_API FISMInstanceHandle
 
     FISMInstanceHandle() = default;
 
-    FISMInstanceHandle(UISMRuntimeComponent* InComponent, int32 InIndex)
-        : InstanceIndex(InIndex)
-        , Component(InComponent)
-    {
-    }
-
     /** Check if this handle is valid and the instance exists */
     bool IsValid() const;
 

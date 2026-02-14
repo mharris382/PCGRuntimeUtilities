@@ -38,6 +38,7 @@ public class ISMRuntimeCore : ModuleRules
 			{
 				"Slate",
 				"SlateCore",
+				"Projects"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

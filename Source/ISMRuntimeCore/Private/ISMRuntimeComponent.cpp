@@ -2,6 +2,7 @@
 // Published by Procedural Architect
 
 #include "ISMRuntimeComponent.h"
+#include "ISMInstanceHandle.h"
 
 UISMRuntimeComponent::UISMRuntimeComponent()
 {
@@ -105,6 +106,7 @@ void UISMRuntimeComponent::UpdateInstanceTransform(int32 InstanceIndex, const FT
 
 #pragma endregion
 
+
 #pragma region SPATIAL_QUERIES
 
 TArray<int32> UISMRuntimeComponent::GetInstancesInRadius(const FVector& Location, float Radius, bool bIncludeDestroyed) const
@@ -128,6 +130,7 @@ TArray<int32> UISMRuntimeComponent::QueryInstances(const FVector& Location, floa
 }
 
 #pragma endregion
+
 
 #pragma region STATE_MANAGEMENT
 
@@ -155,6 +158,79 @@ FISMInstanceState* UISMRuntimeComponent::GetInstanceStateMutable(int32 InstanceI
 	return nullptr;
 }
 
+FISMInstanceHandle UISMRuntimeComponent::GetInstanceHandle(int32 InstanceIndex)
+{
+	return FISMInstanceHandle();
+}
+
+TArray<FISMInstanceHandle> UISMRuntimeComponent::GetConvertedInstances() const
+{
+	return TArray<FISMInstanceHandle>();
+}
+
+void UISMRuntimeComponent::ReturnAllConvertedInstances(bool bDestroyActors, bool bUpdateTransforms)
+{
+}
+
+bool UISMRuntimeComponent::IsInstanceConverted(int32 InstanceIndex) const
+{
+	return false;
+}
+
+#pragma endregion
+
+
+#pragma region INSTANCE_HANDLES
+
+FISMInstanceHandle UISMRuntimeComponent::GetInstanceHandle(int32 InstanceIndex)
+{
+    return GetOrCreateHandle(InstanceIndex);
+}
+
+FISMInstanceHandle& UISMRuntimeComponent::GetOrCreateHandle(int32 InstanceIndex)
+{
+    if (!InstanceHandles.Contains(InstanceIndex))
+    {
+        InstanceHandles.Add(InstanceIndex, FISMInstanceHandle(this, InstanceIndex));
+    }
+
+    return InstanceHandles[InstanceIndex];
+}
+
+TArray<FISMInstanceHandle> UISMRuntimeComponent::GetConvertedInstances() const
+{
+    TArray<FISMInstanceHandle> ConvertedHandles;
+
+    for (const auto& Pair : InstanceHandles)
+    {
+        if (Pair.Value.IsConvertedToActor())
+        {
+            ConvertedHandles.Add(Pair.Value);
+        }
+    }
+
+    return ConvertedHandles;
+}
+
+void UISMRuntimeComponent::ReturnAllConvertedInstances(bool bDestroyActors, bool bUpdateTransforms)
+{
+    TArray<FISMInstanceHandle> ConvertedHandles = GetConvertedInstances();
+
+    for (FISMInstanceHandle& Handle : ConvertedHandles)
+    {
+        Handle.ReturnToISM(bDestroyActors, bUpdateTransforms);
+    }
+}
+
+bool UISMRuntimeComponent::IsInstanceConverted(int32 InstanceIndex) const
+{
+    if (const FISMInstanceHandle* Handle = InstanceHandles.Find(InstanceIndex))
+    {
+        return Handle->IsConvertedToActor();
+    }
+
+    return false;
+}
 #pragma endregion
 
 
@@ -219,5 +295,7 @@ void UISMRuntimeComponent::BroadcastTagChange(int32 InstanceIndex)
 {
 	OnInstanceTagsChanged.Broadcast(this, InstanceIndex);
 }
+
+
 #pragma endregion
 

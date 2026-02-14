@@ -22,7 +22,7 @@
     },
     {
       "Name": "ISMRuntimeDebug",
-      "Type": "Developer",
+      "Type": "UncookedOnly",
       "LoadingPhase": "Default"
     },
     {
@@ -59,6 +59,11 @@
       "Name": "PCGRuntimeUtils",
       "Type": "Runtime",
       "LoadingPhase": "Default"
+    },
+    {
+        "Name": "ISMRuntimeCoreTests",
+        "Type": "UncookedOnly",
+        "LoadingPhase": "Default"
     }
   ],
   "Plugins": [

@@ -26,6 +26,7 @@ OUTPUT_MODULE_DEFINITIONS: Dict[str, List] = {
     # NOTE: you had a missing comma between "ISMRuntimeInteraction" and "ISMRuntimeDamage" in your uploaded file.
     "ISMRuntimeEditor":       [False, "", ["UnrealEd", "ISMRuntimePools", "ISMRuntimeSpatial", "ISMRuntimeResource", "ISMRuntimePhysics", "ISMRuntimeInteraction", "ISMRuntimeDamage"], ["UMG", "Slate", "SlateCore"]],
     "ISMRuntimeDamage":       [True,  "", [], ["Niagara"]],
+    "ISMRuntimeCoreTests":        [True,  "", [], []],
 }
 
 # -------------------------

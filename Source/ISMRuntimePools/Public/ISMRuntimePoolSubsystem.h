@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "ISMActorPool.h"
+#include "ISMRuntimeActorPool.h"
 #include "ISMRuntimePoolSubsystem.generated.h"
 
 // Forward declarations
@@ -105,7 +105,7 @@ public:
      * @param Config - Configuration for the pool (used only if creating new pool)
      * @return Pointer to the pool, or nullptr if creation failed
      */
-    FISMActorPool* GetOrCreatePool(TSubclassOf<AActor> ActorClass, UISMPoolDataAsset* Config);
+    FISMRuntimeActorPool* GetOrCreatePool(TSubclassOf<AActor> ActorClass, UISMPoolDataAsset* Config);
 
     /**
      * Get existing pool for an actor class.
@@ -113,7 +113,7 @@ public:
      * @param ActorClass - The class of actor to find
      * @return Pointer to the pool, or nullptr if pool doesn't exist
      */
-    FISMActorPool* GetPool(TSubclassOf<AActor> ActorClass);
+    FISMRuntimeActorPool* GetPool(TSubclassOf<AActor> ActorClass);
 
     /**
      * Check if a pool exists for an actor class.
@@ -174,7 +174,7 @@ public:
      * @param Actor - Actor to search for
      * @return Pool containing the actor, or nullptr if not found in any pool
      */
-    FISMActorPool* FindPoolForActor(AActor* Actor);
+    FISMRuntimeActorPool* FindPoolForActor(AActor* Actor);
 
     // ===== Statistics =====
 
@@ -270,7 +270,7 @@ protected:
 
     /** Map of actor class to its pool */
     UPROPERTY()
-    TMap<TSubclassOf<AActor>, FISMActorPool> ActorPools;
+    TMap<TSubclassOf<AActor>, FISMRuntimeActorPool> ActorPools;
 
     /** Registered components that use pooling */
     UPROPERTY()

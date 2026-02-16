@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "ISMActorPool.generated.h"
+#include "ISMRuntimeActorPool.generated.h"
 
 
 // Forward declarations
@@ -73,7 +73,7 @@ struct ISMRUNTIMEPOOLS_API FISMPoolStats
  * Pool manager for a single actor class.
  *
  * This is a non-UObject struct that handles the actual pooling logic.
- * One FISMActorPool exists per unique actor class in the subsystem.
+ * One FISMRuntimeActorPool exists per unique actor class in the subsystem.
  *
  * Responsibilities:
  * - Pre-warming: Spawn initial actors
@@ -86,7 +86,7 @@ struct ISMRUNTIMEPOOLS_API FISMPoolStats
  * Thread Safety: This struct is NOT thread-safe. All operations must occur on game thread.
  */
 USTRUCT()
-struct ISMRUNTIMEPOOLS_API FISMActorPool
+struct ISMRUNTIMEPOOLS_API FISMRuntimeActorPool
 {
     GENERATED_BODY()
 
@@ -116,7 +116,7 @@ struct ISMRUNTIMEPOOLS_API FISMActorPool
 
     // ===== Constructor & Initialization =====
 
-    FISMActorPool() = default;
+    FISMRuntimeActorPool() = default;
 
     /**
      * Initialize the pool with configuration and world context.

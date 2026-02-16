@@ -45,7 +45,7 @@ bool UISMRuntimePoolSubsystem::DoesSupportWorldType(EWorldType::Type WorldType) 
 
 // ===== Pool Management =====
 
-FISMActorPool* UISMRuntimePoolSubsystem::GetOrCreatePool(TSubclassOf<AActor> ActorClass, UISMPoolDataAsset* Config)
+FISMRuntimeActorPool* UISMRuntimePoolSubsystem::GetOrCreatePool(TSubclassOf<AActor> ActorClass, UISMPoolDataAsset* Config)
 {
     if (!ActorClass)
     {
@@ -68,7 +68,7 @@ FISMActorPool* UISMRuntimePoolSubsystem::GetOrCreatePool(TSubclassOf<AActor> Act
     }
 
     // Check if pool already exists
-    if (FISMActorPool* ExistingPool = ActorPools.Find(ActorClass))
+    if (FISMRuntimeActorPool* ExistingPool = ActorPools.Find(ActorClass))
     {
         return ExistingPool;
     }
@@ -82,7 +82,7 @@ FISMActorPool* UISMRuntimePoolSubsystem::GetOrCreatePool(TSubclassOf<AActor> Act
     }
 
     // Create new pool
-    FISMActorPool NewPool;
+    FISMRuntimeActorPool NewPool;
     NewPool.Initialize(ActorClass, Config, GetWorld());
 
     // Pre-warm the pool
@@ -94,7 +94,7 @@ FISMActorPool* UISMRuntimePoolSubsystem::GetOrCreatePool(TSubclassOf<AActor> Act
     }
 
     // Add to map
-    FISMActorPool& AddedPool = ActorPools.Add(ActorClass, MoveTemp(NewPool));
+    FISMRuntimeActorPool& AddedPool = ActorPools.Add(ActorClass, MoveTemp(NewPool));
 
     // Log creation
     LogPoolCreation(ActorClass, AddedPool.GetStats());
@@ -102,7 +102,7 @@ FISMActorPool* UISMRuntimePoolSubsystem::GetOrCreatePool(TSubclassOf<AActor> Act
     return &AddedPool;
 }
 
-FISMActorPool* UISMRuntimePoolSubsystem::GetPool(TSubclassOf<AActor> ActorClass)
+FISMRuntimeActorPool* UISMRuntimePoolSubsystem::GetPool(TSubclassOf<AActor> ActorClass)
 {
     if (!ActorClass)
     {
@@ -124,7 +124,7 @@ bool UISMRuntimePoolSubsystem::DestroyPool(TSubclassOf<AActor> ActorClass)
         return false;
     }
 
-    FISMActorPool* Pool = ActorPools.Find(ActorClass);
+    FISMRuntimeActorPool* Pool = ActorPools.Find(ActorClass);
     if (!Pool)
     {
         return false;
@@ -174,7 +174,7 @@ AActor* UISMRuntimePoolSubsystem::RequestActor(TSubclassOf<AActor> ActorClass, U
     }
 
     // Get or create pool
-    FISMActorPool* Pool = GetOrCreatePool(ActorClass, DataAsset);
+    FISMRuntimeActorPool* Pool = GetOrCreatePool(ActorClass, DataAsset);
     if (!Pool)
     {
         UE_LOG(LogTemp, Error, TEXT("UISMRuntimePoolSubsystem::RequestActor - Failed to get or create pool for %s"),
@@ -203,7 +203,7 @@ bool UISMRuntimePoolSubsystem::ReturnActor(AActor* Actor, FTransform& OutFinalTr
     }
 
     // Find which pool this actor belongs to
-    FISMActorPool* Pool = FindPoolForActor(Actor);
+    FISMRuntimeActorPool* Pool = FindPoolForActor(Actor);
     if (!Pool)
     {
         UE_LOG(LogTemp, Warning, TEXT("UISMRuntimePoolSubsystem::ReturnActor - Could not find pool for actor %s"),
@@ -215,7 +215,7 @@ bool UISMRuntimePoolSubsystem::ReturnActor(AActor* Actor, FTransform& OutFinalTr
     return Pool->ReturnActor(Actor, OutFinalTransform, bUpdateTransform);
 }
 
-FISMActorPool* UISMRuntimePoolSubsystem::FindPoolForActor(AActor* Actor)
+FISMRuntimeActorPool* UISMRuntimePoolSubsystem::FindPoolForActor(AActor* Actor)
 {
     if (!Actor)
     {
@@ -243,7 +243,7 @@ bool UISMRuntimePoolSubsystem::GetPoolStats(TSubclassOf<AActor> ActorClass, FISM
         return false;
     }
 
-    const FISMActorPool* Pool = ActorPools.Find(ActorClass);
+    const FISMRuntimeActorPool* Pool = ActorPools.Find(ActorClass);
     if (!Pool)
     {
         return false;
@@ -628,7 +628,7 @@ bool UISMRuntimePoolSubsystem::ValidateAllPools() const
 
     for (const auto& Pair : ActorPools)
     {
-        const FISMActorPool& Pool = Pair.Value;
+        const FISMRuntimeActorPool& Pool = Pair.Value;
         const FString ClassName = Pair.Key->GetName();
 
         // Check pool is valid

@@ -1,4 +1,4 @@
-#include "ISMActorPool.h"
+#include "ISMRuntimeActorPool.h"
 #include "Interfaces/ISMPoolable.h"
 #include "ISMPoolDataAsset.h"
 #include "ISMInstanceHandle.h"
@@ -8,11 +8,11 @@
 
 // ===== Initialization =====
 
-void FISMActorPool::Initialize(TSubclassOf<AActor> InActorClass, UISMPoolDataAsset* InConfig, UWorld* InWorld)
+void FISMRuntimeActorPool::Initialize(TSubclassOf<AActor> InActorClass, UISMPoolDataAsset* InConfig, UWorld* InWorld)
 {
     if (!InActorClass || !InConfig || !InWorld)
     {
-        UE_LOG(LogTemp, Error, TEXT("FISMActorPool::Initialize - Invalid parameters! ActorClass=%s, Config=%s, World=%s"),
+        UE_LOG(LogTemp, Error, TEXT("FISMRuntimeActorPool::Initialize - Invalid parameters! ActorClass=%s, Config=%s, World=%s"),
             InActorClass ? *InActorClass->GetName() : TEXT("nullptr"),
             InConfig ? *InConfig->GetName() : TEXT("nullptr"),
             InWorld ? *InWorld->GetName() : TEXT("nullptr"));
@@ -27,11 +27,11 @@ void FISMActorPool::Initialize(TSubclassOf<AActor> InActorClass, UISMPoolDataAss
     Stats = FISMPoolStats();
     Stats.CreationTime = InWorld->GetTimeSeconds();
 
-    UE_LOG(LogTemp, Log, TEXT("FISMActorPool::Initialize - Pool created for %s with initial size %d"),
+    UE_LOG(LogTemp, Log, TEXT("FISMRuntimeActorPool::Initialize - Pool created for %s with initial size %d"),
         *ActorClass->GetName(), InConfig->InitialPoolSize);
 }
 
-int32 FISMActorPool::PreWarm()
+int32 FISMRuntimeActorPool::PreWarm()
 {
     if (!ValidateOperation(TEXT("PreWarm")))
     {
@@ -52,7 +52,7 @@ int32 FISMActorPool::PreWarm()
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("FISMActorPool::PreWarm - Failed to spawn actor %d/%d for class %s"),
+            UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::PreWarm - Failed to spawn actor %d/%d for class %s"),
                 i + 1, TargetSize, *ActorClass->GetName());
         }
     }
@@ -62,7 +62,7 @@ int32 FISMActorPool::PreWarm()
     Stats.TotalActors = SpawnedCount;
     Stats.AvailableActors = SpawnedCount;
 
-    UE_LOG(LogTemp, Log, TEXT("FISMActorPool::PreWarm - Spawned %d actors for %s in %.2fms"),
+    UE_LOG(LogTemp, Log, TEXT("FISMRuntimeActorPool::PreWarm - Spawned %d actors for %s in %.2fms"),
         SpawnedCount, *ActorClass->GetName(), ElapsedTime);
 
     return SpawnedCount;
@@ -70,7 +70,7 @@ int32 FISMActorPool::PreWarm()
 
 // ===== Core Pool Operations =====
 
-AActor* FISMActorPool::RequestActor(UISMPoolDataAsset* DataAsset, const FISMInstanceHandle& InstanceHandle)
+AActor* FISMRuntimeActorPool::RequestActor(UISMPoolDataAsset* DataAsset, const FISMInstanceHandle& InstanceHandle)
 {
     if (!ValidateOperation(TEXT("RequestActor")))
     {
@@ -104,7 +104,7 @@ AActor* FISMActorPool::RequestActor(UISMPoolDataAsset* DataAsset, const FISMInst
         // Pool exhausted - try to grow
         if (CanGrow())
         {
-            UE_LOG(LogTemp, Verbose, TEXT("FISMActorPool::RequestActor - Pool exhausted, growing by %d actors"),
+            UE_LOG(LogTemp, Verbose, TEXT("FISMRuntimeActorPool::RequestActor - Pool exhausted, growing by %d actors"),
                 PoolConfig->PoolGrowSize);
 
             const int32 Grown = GrowPool();
@@ -118,7 +118,7 @@ AActor* FISMActorPool::RequestActor(UISMPoolDataAsset* DataAsset, const FISMInst
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("FISMActorPool::RequestActor - Pool exhausted and cannot grow! MaxPoolSize=%d"),
+            UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::RequestActor - Pool exhausted and cannot grow! MaxPoolSize=%d"),
                 PoolConfig->MaxPoolSize);
             return nullptr;
         }
@@ -126,7 +126,7 @@ AActor* FISMActorPool::RequestActor(UISMPoolDataAsset* DataAsset, const FISMInst
 
     if (!Actor)
     {
-        UE_LOG(LogTemp, Error, TEXT("FISMActorPool::RequestActor - Failed to get or spawn actor"));
+        UE_LOG(LogTemp, Error, TEXT("FISMRuntimeActorPool::RequestActor - Failed to get or spawn actor"));
         return nullptr;
     }
 
@@ -146,18 +146,18 @@ AActor* FISMActorPool::RequestActor(UISMPoolDataAsset* DataAsset, const FISMInst
     }
     else
     {
-        UE_LOG(LogTemp, Verbose, TEXT("FISMActorPool::RequestActor - Actor %s does not implement IISMPoolable"),
+        UE_LOG(LogTemp, Verbose, TEXT("FISMRuntimeActorPool::RequestActor - Actor %s does not implement IISMPoolable"),
             *Actor->GetName());
     }
 
     return Actor;
 }
 
-bool FISMActorPool::ReturnActor(AActor* Actor, FTransform& OutFinalTransform, bool& bUpdateTransform)
+bool FISMRuntimeActorPool::ReturnActor(AActor* Actor, FTransform& OutFinalTransform, bool& bUpdateTransform)
 {
     if (!Actor)
     {
-        UE_LOG(LogTemp, Warning, TEXT("FISMActorPool::ReturnActor - Null actor provided"));
+        UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::ReturnActor - Null actor provided"));
         return false;
     }
 
@@ -174,7 +174,7 @@ bool FISMActorPool::ReturnActor(AActor* Actor, FTransform& OutFinalTransform, bo
 
     if (ActiveIndex == INDEX_NONE)
     {
-        UE_LOG(LogTemp, Warning, TEXT("FISMActorPool::ReturnActor - Actor %s does not belong to this pool"),
+        UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::ReturnActor - Actor %s does not belong to this pool"),
             *Actor->GetName());
         return false;
     }
@@ -196,7 +196,7 @@ bool FISMActorPool::ReturnActor(AActor* Actor, FTransform& OutFinalTransform, bo
     ResetActor(Actor);
 
     // Move from active to available
-    ActiveActors.RemoveAtSwap(ActiveIndex, 1, false); // Don't shrink array for performance
+    ActiveActors.Remove(ActiveIndex, 1, false); // Don't shrink array for performance
     AvailableActors.Add(Actor);
 
     // Update stats
@@ -207,14 +207,14 @@ bool FISMActorPool::ReturnActor(AActor* Actor, FTransform& OutFinalTransform, bo
     // Check for leaks periodically (every 100 returns)
     if (Stats.TotalReturns % 100 == 0 && Stats.HasLeak())
     {
-        UE_LOG(LogTemp, Warning, TEXT("FISMActorPool::ReturnActor - Potential leak detected! Requests=%d, Returns=%d, Leaked=%d"),
+        UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::ReturnActor - Potential leak detected! Requests=%d, Returns=%d, Leaked=%d"),
             Stats.TotalRequests, Stats.TotalReturns, Stats.GetLeakCount());
     }
 
     return true;
 }
 
-bool FISMActorPool::ContainsActor(AActor* Actor) const
+bool FISMRuntimeActorPool::ContainsActor(AActor* Actor) const
 {
     if (!Actor)
     {
@@ -244,7 +244,7 @@ bool FISMActorPool::ContainsActor(AActor* Actor) const
 
 // ===== Pool Management =====
 
-int32 FISMActorPool::GrowPool(int32 Count)
+int32 FISMRuntimeActorPool::GrowPool(int32 Count)
 {
     if (!ValidateOperation(TEXT("GrowPool")))
     {
@@ -253,7 +253,7 @@ int32 FISMActorPool::GrowPool(int32 Count)
 
     if (!CanGrow())
     {
-        UE_LOG(LogTemp, Warning, TEXT("FISMActorPool::GrowPool - Cannot grow, MaxPoolSize reached (%d)"),
+        UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::GrowPool - Cannot grow, MaxPoolSize reached (%d)"),
             PoolConfig->MaxPoolSize);
         return 0;
     }
@@ -292,14 +292,14 @@ int32 FISMActorPool::GrowPool(int32 Count)
 
     if (SpawnedCount > 0)
     {
-        UE_LOG(LogTemp, Log, TEXT("FISMActorPool::GrowPool - Grew pool by %d actors (Total: %d)"),
+        UE_LOG(LogTemp, Log, TEXT("FISMRuntimeActorPool::GrowPool - Grew pool by %d actors (Total: %d)"),
             SpawnedCount, Stats.TotalActors);
     }
 
     return SpawnedCount;
 }
 
-int32 FISMActorPool::ShrinkPool(bool bForceImmediate)
+int32 FISMRuntimeActorPool::ShrinkPool(bool bForceImmediate)
 {
     if (!ValidateOperation(TEXT("ShrinkPool")))
     {
@@ -351,16 +351,16 @@ int32 FISMActorPool::ShrinkPool(bool bForceImmediate)
 
     if (DestroyedCount > 0)
     {
-        UE_LOG(LogTemp, Log, TEXT("FISMActorPool::ShrinkPool - Destroyed %d unused actors (Total: %d)"),
+        UE_LOG(LogTemp, Log, TEXT("FISMRuntimeActorPool::ShrinkPool - Destroyed %d unused actors (Total: %d)"),
             DestroyedCount, Stats.TotalActors);
     }
 
     return DestroyedCount;
 }
 
-void FISMActorPool::Cleanup()
+void FISMRuntimeActorPool::Cleanup()
 {
-    UE_LOG(LogTemp, Log, TEXT("FISMActorPool::Cleanup - Destroying pool with %d actors"), Stats.TotalActors);
+    UE_LOG(LogTemp, Log, TEXT("FISMRuntimeActorPool::Cleanup - Destroying pool with %d actors"), Stats.TotalActors);
 
     // Destroy all actors (both active and available)
     auto DestroyActors = [](TArray<TWeakObjectPtr<AActor>>& Actors)
@@ -390,14 +390,14 @@ void FISMActorPool::Cleanup()
 
 // ===== Queries =====
 
-bool FISMActorPool::IsValid() const
+bool FISMRuntimeActorPool::IsValid() const
 {
     return ActorClass != nullptr &&
         PoolConfig.IsValid() &&
         OwningWorld.IsValid();
 }
 
-bool FISMActorPool::CanGrow() const
+bool FISMRuntimeActorPool::CanGrow() const
 {
     if (!PoolConfig.IsValid())
     {
@@ -413,7 +413,7 @@ bool FISMActorPool::CanGrow() const
     return Stats.TotalActors < MaxSize;
 }
 
-bool FISMActorPool::ShouldShrink() const
+bool FISMRuntimeActorPool::ShouldShrink() const
 {
     if (!PoolConfig.IsValid() || !PoolConfig->bAllowPoolShrinking)
     {
@@ -426,7 +426,7 @@ bool FISMActorPool::ShouldShrink() const
     return UnusedPercentage >= PoolConfig->ShrinkThreshold;
 }
 
-int32 FISMActorPool::GetShrinkCandidateCount() const
+int32 FISMRuntimeActorPool::GetShrinkCandidateCount() const
 {
     if (!PoolConfig.IsValid())
     {
@@ -442,18 +442,18 @@ int32 FISMActorPool::GetShrinkCandidateCount() const
 
 // ===== Internal Helpers =====
 
-AActor* FISMActorPool::SpawnPoolActor(bool bIsPreWarm)
+AActor* FISMRuntimeActorPool::SpawnPoolActor(bool bIsPreWarm)
 {
     UWorld* World = OwningWorld.Get();
     if (!World)
     {
-        UE_LOG(LogTemp, Error, TEXT("FISMActorPool::SpawnPoolActor - World is invalid"));
+        UE_LOG(LogTemp, Error, TEXT("FISMRuntimeActorPool::SpawnPoolActor - World is invalid"));
         return nullptr;
     }
 
     if (!ActorClass)
     {
-        UE_LOG(LogTemp, Error, TEXT("FISMActorPool::SpawnPoolActor - ActorClass is null"));
+        UE_LOG(LogTemp, Error, TEXT("FISMRuntimeActorPool::SpawnPoolActor - ActorClass is null"));
         return nullptr;
     }
 
@@ -467,7 +467,7 @@ AActor* FISMActorPool::SpawnPoolActor(bool bIsPreWarm)
 
     if (!Actor)
     {
-        UE_LOG(LogTemp, Error, TEXT("FISMActorPool::SpawnPoolActor - Failed to spawn actor of class %s"),
+        UE_LOG(LogTemp, Error, TEXT("FISMRuntimeActorPool::SpawnPoolActor - Failed to spawn actor of class %s"),
             *ActorClass->GetName());
         return nullptr;
     }
@@ -484,7 +484,7 @@ AActor* FISMActorPool::SpawnPoolActor(bool bIsPreWarm)
     return Actor;
 }
 
-void FISMActorPool::ResetActor(AActor* Actor)
+void FISMRuntimeActorPool::ResetActor(AActor* Actor)
 {
     if (!Actor)
     {
@@ -506,7 +506,7 @@ void FISMActorPool::ResetActor(AActor* Actor)
     }
 }
 
-void FISMActorPool::ApplyDefaultReset(AActor* Actor)
+void FISMRuntimeActorPool::ApplyDefaultReset(AActor* Actor)
 {
     if (!Actor)
     {
@@ -539,14 +539,14 @@ void FISMActorPool::ApplyDefaultReset(AActor* Actor)
     Actor->SetActorTickEnabled(false);
 }
 
-void FISMActorPool::UpdateStats()
+void FISMRuntimeActorPool::UpdateStats()
 {
     Stats.ActiveActors = ActiveActors.Num();
     Stats.AvailableActors = AvailableActors.Num();
     Stats.TotalActors = Stats.ActiveActors + Stats.AvailableActors;
 }
 
-void FISMActorPool::CleanupInvalidActors()
+void FISMRuntimeActorPool::CleanupInvalidActors()
 {
     // Remove null weak pointers from both arrays
     AvailableActors.RemoveAll([](const TWeakObjectPtr<AActor>& ActorPtr)
@@ -563,23 +563,23 @@ void FISMActorPool::CleanupInvalidActors()
     UpdateStats();
 }
 
-bool FISMActorPool::ValidateOperation(const FString& OperationName) const
+bool FISMRuntimeActorPool::ValidateOperation(const FString& OperationName) const
 {
     if (!ActorClass)
     {
-        UE_LOG(LogTemp, Error, TEXT("FISMActorPool::%s - ActorClass is null"), *OperationName);
+        UE_LOG(LogTemp, Error, TEXT("FISMRuntimeActorPool::%s - ActorClass is null"), *OperationName);
         return false;
     }
 
     if (!PoolConfig.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("FISMActorPool::%s - PoolConfig is invalid"), *OperationName);
+        UE_LOG(LogTemp, Error, TEXT("FISMRuntimeActorPool::%s - PoolConfig is invalid"), *OperationName);
         return false;
     }
 
     if (!OwningWorld.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("FISMActorPool::%s - OwningWorld is invalid"), *OperationName);
+        UE_LOG(LogTemp, Error, TEXT("FISMRuntimeActorPool::%s - OwningWorld is invalid"), *OperationName);
         return false;
     }
 

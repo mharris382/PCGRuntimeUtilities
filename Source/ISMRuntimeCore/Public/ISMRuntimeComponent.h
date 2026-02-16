@@ -345,11 +345,23 @@ public:
 
     // ===== Accessors =====
 	bool IsISMInitialized() const { return bIsInitialized; }
+
+
+    void SetInstanceDataAsset(UISMInstanceDataAsset* NewDataAsset)
+    {
+		InstanceData = NewDataAsset;
+        if(InstanceData)
+        {
+            OnInstanceDataAssigned();
+		}
+    }
     
 protected:
     // ===== Subclass Hooks =====
 
 #pragma region SUBCLASS_HOOKS
+
+    virtual void OnInstanceDataAssigned() {}
 
 /** Override to add component-specific tags during initialization */
     virtual void BuildComponentTags();

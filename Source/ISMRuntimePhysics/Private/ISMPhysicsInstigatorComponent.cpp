@@ -22,7 +22,7 @@ void UISMPhysicsInstigatorComponent::BeginPlay()
     if (AActor* Owner = GetOwner())
     {
         CachedRootPrimitive = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
-        LastPosition = Owner->GetActorLocation();
+        LastPosition = GetComponentLocation();
     }
     
     // Refresh physics components cache
@@ -169,7 +169,7 @@ void UISMPhysicsInstigatorComponent::PerformInstigatorUpdate()
         return;
     }
     
-    const FVector OwnerLocation = Owner->GetActorLocation();
+	const FVector Location = GetComponentLocation();
     TArray<UISMPhysicsComponent*> PhysicsComponents = GetPhysicsComponents();
     
     // Calculate impact force once
@@ -198,6 +198,13 @@ void UISMPhysicsInstigatorComponent::PerformInstigatorUpdate()
             
             // Get instance location for impact calculations
             const FVector InstanceLocation = PhysicsComponent->GetInstanceLocation(InstanceIndex);
+			const float DistanceSqr = FVector::DistSquared(Location, InstanceLocation);
+            if (DistanceSqr > FMath::Square(QueryRadius))
+            {
+                UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsInstigatorComponent::PerformInstigatorUpdate - Instance %d is outside of query radius (Distance: %.1f)"),
+					InstanceIndex, FMath::Sqrt(DistanceSqr));
+                continue; // Skip if outside of radius (shouldn't happen if query is correct, but just in case)
+			}
             const FVector ImpactNormal = CachedVelocity.GetSafeNormal();
             
             // Trigger conversion
@@ -274,7 +281,7 @@ void UISMPhysicsInstigatorComponent::QueryComponent(UISMPhysicsComponent* Physic
         return;
     }
     
-    const FVector OwnerLocation = Owner->GetActorLocation();
+    const FVector OwnerLocation = GetComponentLocation();
     
     // Query instances within radius
     OutInstances = PhysicsComponent->GetInstancesInRadius(OwnerLocation, QueryRadius, false);
@@ -434,12 +441,13 @@ void UISMPhysicsInstigatorComponent::DrawDebugInfo() const
         return;
     }
     
-    const FVector OwnerLocation = Owner->GetActorLocation();
+    const FVector OwnerLocation = GetComponentLocation();
     
+    float r = GetQueryRadius();
     // Draw query radius sphere
     if (bShowDebugSphere)
     {
-        DrawDebugSphere(World, OwnerLocation, QueryRadius, 16, FColor::Green, false, -1.0f, 0, 2.0f);
+        DrawDebugSphere(World, OwnerLocation,r, 16, FColor::Green, false, -1.0f, 0, 2.0f);
     }
     
     // Draw lines to nearby instances
@@ -455,7 +463,7 @@ void UISMPhysicsInstigatorComponent::DrawDebugInfo() const
             }
             
             // Get nearby instances
-            TArray<int32> NearbyInstances = PhysicsComponent->GetInstancesInRadius(OwnerLocation, QueryRadius, false);
+            TArray<int32> NearbyInstances = PhysicsComponent->GetInstancesInRadius(OwnerLocation, r, false);
             
             for (int32 InstanceIndex : NearbyInstances)
             {
@@ -490,6 +498,7 @@ void UISMPhysicsInstigatorComponent::DrawDebugInfo() const
 
 // ===== Utility =====
 
+
 void UISMPhysicsInstigatorComponent::SetInstigatorEnabled(bool bEnabled)
 {
     if (bIsEnabled == bEnabled)
@@ -502,3 +511,10 @@ void UISMPhysicsInstigatorComponent::SetInstigatorEnabled(bool bEnabled)
     UE_LOG(LogTemp, Log, TEXT("UISMPhysicsInstigatorComponent::SetInstigatorEnabled - %s"),
         bIsEnabled ? TEXT("Enabled") : TEXT("Disabled"));
 }
+
+float UISMPhysicsInstigatorComponent::GetQueryRadius() const
+{
+    return QueryRadius;
+}
+
+

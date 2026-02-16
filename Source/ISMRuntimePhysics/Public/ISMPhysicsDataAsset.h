@@ -175,6 +175,11 @@ public:
               EditCondition="bCheckAngularVelocity", EditConditionHides,
               Tooltip="Angular velocity threshold (rad/s) to consider actor at rest."))
     float RestingAngularThreshold = 0.1f;
+
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Resting|Debugging", meta = (Tooltip = "Log resting checks and state changes for debugging."))
+	bool bLogRestingChecks = false;
+
     
     // ===== Visual/Audio Feedback =====
     
@@ -255,4 +260,7 @@ public:
      * Heavier/slower objects need smaller pools than light/fast debris.
      */
     void GetRecommendedPoolSettings(int32& OutInitialSize, int32& OutGrowSize) const;
+
+
+    void LogRestingCheck(const class AActor* Owner, float LinearVelocity, float AngularVelocity, bool passed);
 };

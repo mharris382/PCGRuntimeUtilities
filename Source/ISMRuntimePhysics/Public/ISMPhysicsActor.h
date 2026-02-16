@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "ISMInstanceHandle.h"
+//#include "Logging/LogMacros.h"
 #include "Interfaces/ISMPoolable.h"
 #include "ISMPhysicsActor.generated.h"
 
@@ -163,6 +164,11 @@ public:
      */
     UFUNCTION(BlueprintPure, Category = "ISM Physics")
     const FISMInstanceHandle& GetInstanceHandle() const { return InstanceHandle; }
+
+
+    
+    void SetInstanceHandle(const struct FISMInstanceHandle& Handle);
+
     
     /**
      * Get the physics data asset used to configure this actor.
@@ -233,6 +239,8 @@ protected:
      * @return True if below thresholds
      */
     bool IsVelocityBelowThreshold(float LinearVelocity, float AngularVelocity) const;
+
+	
 
 public:
     // ===== Debug Visualization =====

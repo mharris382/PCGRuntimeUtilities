@@ -115,16 +115,33 @@ int32 AISMRuntimeActor::CreateRuntimeComponents()
             *MeshMapping->RuntimeComponentClass->GetClassPathName().ToString(),
             *Mesh->GetName());
 
-        // Create runtime component
-        UISMRuntimeComponent* RuntimeComp = CreateRuntimeComponentForISM(
-            ISMComp,
-            MeshMapping->RuntimeComponentClass,
-            MeshMapping
-        );
-
-        if (RuntimeComp)
+		for (int i = 0; i < MeshMapping->InstanceDataAssets.Num(); i++)
         {
-            CreatedCount++;
+            UISMInstanceDataAsset* DataAsset = MeshMapping->InstanceDataAssets[i];
+            if (!DataAsset)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[ISMRuntimeActor] Null data asset in mapping for mesh %s, skipping"),
+                    *Mesh->GetName());
+                continue;
+            }
+			
+            if (DataAsset->GetStaticMesh() != Mesh)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[ISMRuntimeActor] Data asset %s mesh does not match ISM mesh %s, skipping"),
+                    *DataAsset->GetName(), *Mesh->GetName());
+                continue;
+            }
+
+            UISMRuntimeComponent* RuntimeComp = CreateRuntimeComponentForISM(
+                ISMComp,
+                MeshMapping->RuntimeComponentClass,
+                MeshMapping,
+                i);
+            if (RuntimeComp)
+            {
+                CreatedRuntimeComponents.Add(RuntimeComp);
+                CreatedCount++;
+            }
         }
     }
 
@@ -262,13 +279,15 @@ const FISMMeshComponentMapping* AISMRuntimeActor::FindMeshMapping(UStaticMesh* M
 
     for (const FISMMeshComponentMapping& Mapping : MeshMappings)
     {
-        // Handle soft object ptr
-        UStaticMesh* MappingMesh = Mapping.StaticMesh.LoadSynchronous();
-        if (MappingMesh == Mesh)
+		for (const UISMInstanceDataAsset* DataAsset : Mapping.InstanceDataAssets)
         {
-            return &Mapping;
+			UStaticMesh* DataAssetMesh = DataAsset->GetStaticMesh();
+			if (DataAssetMesh == Mesh)
+            {
+                return &Mapping;
+            }
         }
-    }
+        }
 
     return nullptr;
 }
@@ -288,7 +307,8 @@ TSubclassOf<UISMRuntimeComponent> AISMRuntimeActor::GetRuntimeComponentClassForI
 UISMRuntimeComponent* AISMRuntimeActor::CreateRuntimeComponentForISM(
     UInstancedStaticMeshComponent* ISMComponent,
     TSubclassOf<UISMRuntimeComponent> ComponentClass,
-    const FISMMeshComponentMapping* MeshMapping)
+    const FISMMeshComponentMapping* MeshMapping, 
+    const int DataInstanceIndex)
 {
     if (!ISMComponent || !ComponentClass)
         return nullptr;
@@ -297,9 +317,10 @@ UISMRuntimeComponent* AISMRuntimeActor::CreateRuntimeComponentForISM(
     FName CompName = MakeUniqueObjectName(this, ComponentClass,
         FName(*FString::Printf(TEXT("RuntimeComp_%s"), *ISMComponent->GetName())));
 
+	AActor* ISMOwner = ISMComponent->GetOwner(); 
     // Create the component
     UISMRuntimeComponent* RuntimeComp = NewObject<UISMRuntimeComponent>(
-        this,
+        ISMOwner,          // or should this actor be the owner of the runtime component, regardless of where the ISM is?
         ComponentClass,
         CompName,
         RF_Transient
@@ -322,9 +343,9 @@ UISMRuntimeComponent* AISMRuntimeActor::CreateRuntimeComponentForISM(
             RuntimeComp->SpatialIndexCellSize = MeshMapping->OverrideCellSize;
         }
 
-        if (MeshMapping->InstanceDataAsset)
+        if (MeshMapping->InstanceDataAssets[DataInstanceIndex])
         {
-            RuntimeComp->InstanceData = MeshMapping->InstanceDataAsset;
+			RuntimeComp->SetInstanceDataAsset(MeshMapping->InstanceDataAssets[DataInstanceIndex]);
         }
     }
 

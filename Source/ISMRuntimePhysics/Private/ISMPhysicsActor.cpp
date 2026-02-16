@@ -2,6 +2,8 @@
 #include "ISMPhysicsDataAsset.h"
 #include "ISMInstanceHandle.h"
 #include "Components/StaticMeshComponent.h"
+#include "Logging/LogMacros.h"
+#include "ISMRuntimeComponent.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "Kismet/GameplayStatics.h"
 #include "DrawDebugHelpers.h"
@@ -370,6 +372,14 @@ void AISMPhysicsActor::PlayReturnSound()
     );
 }
 
+void AISMPhysicsActor::SetInstanceHandle(const FISMInstanceHandle& Handle)
+
+{
+    InstanceHandle = Handle;
+    InstanceHandle.SetConvertedActor(this);
+    UE_LOG(LogTemp, Log, TEXT("PhysicsActor %s set instance handle: Component=%s, Index=%d"), *GetName(), *Handle.Component.Get()->GetName(), Handle.InstanceIndex);
+}
+
 // ===== Accessors =====
 
 float AISMPhysicsActor::GetLinearVelocityMagnitude() const
@@ -448,7 +458,7 @@ bool AISMPhysicsActor::IsVelocityBelowThreshold(float LinearVelocity, float Angu
     {
         bAngularBelowThreshold = AngularVelocity <= PhysicsData->RestingAngularThreshold;
     }
-    
+	PhysicsData->LogRestingCheck(GetOwner(), LinearVelocity, AngularVelocity, bLinearBelowThreshold && bAngularBelowThreshold);
     return bLinearBelowThreshold && bAngularBelowThreshold;
 }
 

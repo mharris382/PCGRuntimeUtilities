@@ -1,5 +1,6 @@
 #include "ISMPhysicsComponent.h"
 #include "ISMPhysicsDataAsset.h"
+#include "ISMInstanceDataAsset.h"
 #include "ISMPhysicsActor.h"
 #include "ISMRuntimePoolSubsystem.h"
 #include "ISMInstanceHandle.h"
@@ -13,6 +14,15 @@ UISMPhysicsComponent::UISMPhysicsComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
     PrimaryComponentTick.bStartWithTickEnabled = true;
+}
+
+
+namespace
+{
+    void LogGeminiCurseWarning(const FString& ComponentName)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent '%s' - Gemini Curse is enabled! This allows multiple physics actors per instance but can cause visual and gameplay issues. Use with caution."), *ComponentName);
+	}
 }
 
 // ===== Lifecycle =====
@@ -93,6 +103,22 @@ void UISMPhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
 #endif
 }
 
+void UISMPhysicsComponent::OnInstanceDataAssigned()
+{
+    if(!InstanceData)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::OnInstanceDataAssigned - Assigned null InstanceData on %s"), *GetOwner()->GetName());
+        return;
+	}
+	check(InstanceData);
+	PhysicsData = Cast<UISMPhysicsDataAsset>(InstanceData);
+    if(!PhysicsData)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::OnInstanceDataAssigned - Assigned InstanceData is not a UISMPhysicsDataAsset on %s"), *GetOwner()->GetName());
+	}
+    check(PhysicsData);
+}
+
 void UISMPhysicsComponent::OnInitializationComplete()
 {
     Super::OnInitializationComplete();
@@ -111,7 +137,7 @@ void UISMPhysicsComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
 
 // ===== Conversion Management =====
 
-AActor* UISMPhysicsComponent::ConvertInstanceToPhysics(int32 InstanceIndex, FVector ImpactPoint, 
+AActor* UISMPhysicsComponent::ConvertInstanceToPhysics(int32 InstanceIndex, FVector ImpactPoint,
     FVector ImpactNormal, float ImpactForce, AActor* Instigator)
 {
     // Validate instance
@@ -120,27 +146,30 @@ AActor* UISMPhysicsComponent::ConvertInstanceToPhysics(int32 InstanceIndex, FVec
         UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Invalid instance index %d"), InstanceIndex);
         return nullptr;
     }
-    
-    // Check if instance is already converted
-    if (IsInstanceConverted(InstanceIndex))
+
+    if (bApplyGeminiCurse)
+        LogGeminiCurseWarning(GetOwner()->GetName());
+
+    // Check if instance is already converted (ignore safety check if Gemini Curse enabled, as multiple actors per instance is allowed in that case)
+    if (!bApplyGeminiCurse && IsInstanceConverted(InstanceIndex))
     {
         UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Instance %d already converted"), InstanceIndex);
         return nullptr;
     }
-    
+
     // Check if conversion should be allowed
     if (!ShouldAllowConversion(InstanceIndex, ImpactForce))
     {
         UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Conversion denied by limiters"));
         return nullptr;
     }
-    
+
     // Handle overflow if at max concurrent actors
     if (IsAtMaxConcurrentActors())
     {
         HandleActorOverflow();
     }
-    
+
     // Get instance handle
     FISMInstanceHandle Handle = GetInstanceHandle(InstanceIndex);
     if (!Handle.IsValid())
@@ -149,12 +178,24 @@ AActor* UISMPhysicsComponent::ConvertInstanceToPhysics(int32 InstanceIndex, FVec
         return nullptr;
     }
     
+    if (bApplyGeminiCurse && Handle.GetConvertedActor())
+        HandlePrevPooledActorIfGeminiCursed(Handle);
+
     // Spawn physics actor from pool
-    AActor* PhysicsActor = SpawnPhysicsActorFromPool(Handle);
+    AISMPhysicsActor* PhysicsActor = SpawnPhysicsActorFromPool(Handle);
     if (!PhysicsActor)
     {
         UE_LOG(LogTemp, Error, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Failed to spawn physics actor"));
         return nullptr;
+    }
+    
+    if(!bApplyGeminiCurse)
+    {
+        // Hide the ISM instance (visual is now represented by physics actor)
+        HideInstance(InstanceIndex, false); // Don't update bounds for performance
+
+        // Mark the handle as converted (this tracks conversion state)
+        Handle.SetConvertedActor(PhysicsActor);
     }
     
     // Apply conversion impulse
@@ -253,7 +294,7 @@ bool UISMPhysicsComponent::ShouldAllowConversion(int32 InstanceIndex, float Impa
 
 // ===== Conversion Helpers =====
 
-AActor* UISMPhysicsComponent::SpawnPhysicsActorFromPool(const FISMInstanceHandle& InstanceHandle)
+AISMPhysicsActor* UISMPhysicsComponent::SpawnPhysicsActorFromPool(const FISMInstanceHandle& InstanceHandle)
 {
     if (!PoolSubsystem.IsValid())
     {
@@ -274,16 +315,21 @@ AActor* UISMPhysicsComponent::SpawnPhysicsActorFromPool(const FISMInstanceHandle
         UE_LOG(LogTemp, Error, TEXT("UISMPhysicsComponent::SpawnPhysicsActorFromPool - PooledActorClass not set in data asset"));
         return nullptr;
     }
+	//TODO: verify that the class is of subtype ISMPhysicsActor for safety
     
     // Request actor from pool
     AActor* Actor = PoolSubsystem->RequestActor(ActorClass, PhysicsData, InstanceHandle);
-    
     if (!Actor)
     {
         UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::SpawnPhysicsActorFromPool - Pool exhausted or failed to spawn"));
     }
-    
-    return Actor;
+	AISMPhysicsActor* ISMActor = Cast<AISMPhysicsActor>(Actor);
+    if (!ISMActor)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::Spawned Actor was not of Type ISMPhysicsActor!"));
+    }
+	ISMActor->SetInstanceHandle(InstanceHandle);
+    return ISMActor;
 }
 
 void UISMPhysicsComponent::HandleActorOverflow()
@@ -487,7 +533,51 @@ void UISMPhysicsComponent::RegisterActorReturnCallback(AISMPhysicsActor* Physics
     {
         return;
     }
-    
+    // Bind to the instance handle's return delegate
+    const FISMInstanceHandle& Handle = PhysicsActor->GetInstanceHandle();
+    if (Handle.IsValid())
+    {
+        if (!bApplyGeminiCurse)
+        {
+            OnInstanceReturnedToISM.BindLambda([this, InstanceIndex = Handle.InstanceIndex](const FISMInstanceHandle& ReturnedHandle, const FTransform& FinalTransform)
+                {
+                    if (ReturnedHandle.InstanceIndex == InstanceIndex)
+                    {
+                        ShowInstance(InstanceIndex, false); // Unhide the ISM instance (if it was hidden)
+                        // Update stats
+                        TotalReturns++;
+
+                        UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::OnInstanceReturnedToISM - Instance %d returned to ISM (Active: %d, Total Returns: %d)"),
+                            InstanceIndex, ActivePhysicsActors.Num(), TotalReturns);
+                    }
+                    else
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::OnInstanceReturnedToISM - Returned instance index %d does not match expected %d"),
+                            ReturnedHandle.InstanceIndex, InstanceIndex);
+                    }
+                });
+        }
+        else 
+        {
+			LogGeminiCurseWarning(GetOwner()->GetName());
+            
+            OnInstanceReturnedToISM.BindLambda([this, InstanceIndex = Handle.InstanceIndex](const FISMInstanceHandle& ReturnedHandle, const FTransform& FinalTransform)
+                {
+                    if (ReturnedHandle.InstanceIndex == InstanceIndex)
+                    {
+                        LogGeminiCurseWarning(GetOwner()->GetName());
+
+						AddInstance(FinalTransform, false); // Add a new instance to the ISM (since we are duplicating instead of removing/restoring)
+                        
+                        // Update stats
+                        TotalReturns++;
+
+                        UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::OnInstanceReturnedToISM - Instance %d returned to ISM (Active: %d, Total Returns: %d)"),
+                            InstanceIndex, ActivePhysicsActors.Num(), TotalReturns);
+                    }
+                });
+        }
+    }
     // When actor returns to ISM, we need to remove it from our tracking
     // This is handled automatically via the instance handle's delegates
     // The actor will call ReturnToISM on its handle, which triggers the pool return
@@ -545,3 +635,18 @@ void UISMPhysicsComponent::DrawDebugVisualization() const
 }
 
 #endif // WITH_EDITOR
+
+
+
+void UISMPhysicsComponent::HandlePrevPooledActorIfGeminiCursed(const FISMInstanceHandle& Handle)
+{
+    //lets just return the actor to the pool immediately, since we are allowing multiple actors per instance, this will just be a visual refresh and won't cause gameplay issues
+    if (AActor* Actor = Handle.GetConvertedActor())
+    {
+        if (AISMPhysicsActor* PhysicsActor = Cast<AISMPhysicsActor>(Actor))
+        {
+            UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::OnActorWillConvert_GeminiCursed - Returning existing actor for instance %d before converting new one"), Handle.InstanceIndex);
+            PhysicsActor->ReturnToISM();
+        }
+    }
+}

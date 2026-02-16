@@ -38,6 +38,9 @@ public:
     UStaticMesh* StaticMesh;
 
 
+	UStaticMesh* GetStaticMesh() const { return StaticMesh; }
+
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	TArray<UMaterialInterface*> MaterialOverrides;
 

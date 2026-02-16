@@ -195,7 +195,9 @@ public:
 
 protected:
     // ===== Internal State =====
-    
+
+    bool bApplyGeminiCurse = false;
+
     /** Pool subsystem reference (cached on BeginPlay) */
     UPROPERTY()
     TWeakObjectPtr<UISMRuntimePoolSubsystem> PoolSubsystem;
@@ -214,6 +216,8 @@ protected:
     int32 TotalReturns = 0;
     
     // ===== Lifecycle Hooks =====
+
+    virtual void OnInstanceDataAssigned() override;
     
     /** Initialize physics subsystem integration */
     virtual void OnInitializationComplete() override;
@@ -229,8 +233,9 @@ protected:
      * @param InstanceHandle - Handle to the instance being converted
      * @return Spawned actor, or nullptr if pool exhausted
      */
-    AActor* SpawnPhysicsActorFromPool(const FISMInstanceHandle& InstanceHandle);
-    
+    AISMPhysicsActor* SpawnPhysicsActorFromPool(const FISMInstanceHandle& InstanceHandle);
+   
+
     /**
      * Handle overflow when max concurrent actors reached.
      * Returns an actor to pool based on overflow behavior.
@@ -341,4 +346,8 @@ public:
         OutTotalConversions = TotalConversions;
         OutTotalReturns = TotalReturns;
     }
+
+
+	protected:
+        void HandlePrevPooledActorIfGeminiCursed(const FISMInstanceHandle& Handle);
 };

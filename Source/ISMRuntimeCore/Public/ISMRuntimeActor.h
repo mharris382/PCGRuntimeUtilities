@@ -17,9 +17,9 @@ struct FISMMeshComponentMapping
 {
     GENERATED_BODY()
 
-    /** The static mesh to match against */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
-    TSoftObjectPtr<UStaticMesh> StaticMesh;
+	// the DataAsset already has a reference to the StaticMesh, so we don't need it here - we can just pull it from there when creating components
+    //UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
+    //TSoftObjectPtr<UStaticMesh> StaticMesh;
 
     /** The runtime component class to create for this mesh */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
@@ -29,9 +29,11 @@ struct FISMMeshComponentMapping
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime", meta = (ClampMin = "100.0"))
     float OverrideCellSize = 0.0f; // 0 = use default
 
-    /** Optional: Instance data asset to apply to created component */
+
+	//Required Data Asset.  Also provide an array for convienience when setting up in the editor.  Multiple data assets can spawn the same RuntimeComponentClass
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
-    class UISMInstanceDataAsset* InstanceDataAsset = nullptr;
+    class TArray<UISMInstanceDataAsset*> InstanceDataAssets;
+
 };
 
 /**
@@ -216,7 +218,8 @@ protected:
     UISMRuntimeComponent* CreateRuntimeComponentForISM(
         UInstancedStaticMeshComponent* ISMComponent,
         TSubclassOf<UISMRuntimeComponent> ComponentClass,
-        const FISMMeshComponentMapping* MeshMapping);
+        const FISMMeshComponentMapping* MeshMapping,
+        const int DataAssetIndex);
 
     /** Update the bounds box component */
     void UpdateBoundsVisualization();

@@ -16,7 +16,8 @@ public class ISMRuntimePhysics : ModuleRules
                 "Engine",
                 "ISMRuntimeCore",
                 "ISMRuntimePools",
-                "GameplayTags"
+                "GameplayTags",
+                "PhysicsCore"
             }
         );
 

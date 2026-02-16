@@ -4,6 +4,7 @@
 #include "GameplayTagContainer.h"
 #include "Delegates/DelegateCombinations.h"
 #include "Components/ActorComponent.h"
+#include "Components/SceneComponent.h"
 #include "ISMPhysicsInstigatorComponent.generated.h"
 
 // Forward declarations
@@ -28,7 +29,7 @@ class UPrimitiveComponent;
  * No blueprint code required - completely automatic.
  */
 UCLASS(Blueprintable, ClassGroup=(ISMRuntime), meta=(BlueprintSpawnableComponent))
-class ISMRUNTIMEPHYSICS_API UISMPhysicsInstigatorComponent : public UActorComponent
+class ISMRUNTIMEPHYSICS_API UISMPhysicsInstigatorComponent : public USceneComponent
 {
     GENERATED_BODY()
 
@@ -91,6 +92,13 @@ public:
               Tooltip="Min velocity (cm/s) to trigger physics."))
     float MinimumVelocity = 10.0f;
     
+    ///**
+    // * Enable debug visualization of instigator queries and impacts.
+    // * Shows query radius and impact points in the world.
+	// */
+    //UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Instigator|Debugging")
+    //bool bEnableInstigatorVisualization = false;
+
     /**
      * Only trigger physics on instances with these tags.
      * Empty = affect all instances.
@@ -283,6 +291,8 @@ public:
      */
     UFUNCTION(BlueprintPure, Category = "Instigator")
     bool IsInstigatorEnabled() const { return bIsEnabled; }
+
+    float GetQueryRadius() const;
 
 private:
     /** Whether instigator is currently active */

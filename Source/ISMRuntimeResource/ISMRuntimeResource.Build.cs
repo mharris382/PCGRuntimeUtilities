@@ -15,6 +15,8 @@ public class ISMRuntimeResource : ModuleRules
                 "CoreUObject",
                 "Engine",
                 "ISMRuntimeCore",
+                "GameplayTags",
+                "Niagara",
             }
         );
 

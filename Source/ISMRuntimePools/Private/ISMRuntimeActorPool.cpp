@@ -196,7 +196,7 @@ bool FISMRuntimeActorPool::ReturnActor(AActor* Actor, FTransform& OutFinalTransf
     ResetActor(Actor);
 
     // Move from active to available
-    ActiveActors.Remove(ActiveIndex, 1, false); // Don't shrink array for performance
+    ActiveActors.RemoveSingleSwap(Actor, EAllowShrinking::No); // Don't shrink array for performance
     AvailableActors.Add(Actor);
 
     // Update stats

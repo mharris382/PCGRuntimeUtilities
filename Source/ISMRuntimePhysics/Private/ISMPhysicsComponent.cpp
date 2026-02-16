@@ -543,12 +543,17 @@ void UISMPhysicsComponent::RegisterActorReturnCallback(AISMPhysicsActor* Physics
                 {
                     if (ReturnedHandle.InstanceIndex == InstanceIndex)
                     {
+                        // Update the instance transform to match the physics actor's final position
+                        // This preserves the location, rotation, AND scale from the physics simulation
+                        UpdateInstanceTransform(InstanceIndex, FinalTransform, true, false);
+                        
                         ShowInstance(InstanceIndex, false); // Unhide the ISM instance (if it was hidden)
+                        
                         // Update stats
                         TotalReturns++;
 
-                        UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::OnInstanceReturnedToISM - Instance %d returned to ISM (Active: %d, Total Returns: %d)"),
-                            InstanceIndex, ActivePhysicsActors.Num(), TotalReturns);
+                        UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::OnInstanceReturnedToISM - Instance %d returned to ISM at %s with scale %s (Active: %d, Total Returns: %d)"),
+                            InstanceIndex, *FinalTransform.GetLocation().ToString(), *FinalTransform.GetScale3D().ToString(), ActivePhysicsActors.Num(), TotalReturns);
                     }
                     else
                     {

@@ -3,6 +3,8 @@
 
 #include "ISMRuntimeSubsystem.h"
 #include "ISMRuntimeComponent.h"
+#include "ISMInstanceHandle.h"
+#include "ISMInstanceState.h"
 #include "ISMQueryFilter.h"
 #include "Engine/World.h"
 #include "Logging/LogMacros.h"
@@ -303,6 +305,107 @@ TArray<FISMInstanceReference> UISMRuntimeSubsystem::QueryInstancesInBox(
     return Results;
 }
 
+
+TArray<FISMInstanceHandle> UISMRuntimeSubsystem::QueryInstancesOverlappingBox(
+    const FBox& Box,
+    const FISMQueryFilter& Filter) const
+{
+    TArray<FISMInstanceHandle> Results;
+
+    if (!Box.IsValid)
+    {
+        return Results;
+    }
+
+    for (const TWeakObjectPtr<UISMRuntimeComponent>& CompPtr : AllComponents)
+    {
+        UISMRuntimeComponent* Comp = CompPtr.Get();
+        if (!Comp || !Comp->IsISMInitialized())
+        {
+            continue;
+        }
+
+        // Component-level filter first (tags, interfaces) — cheap
+        if (!Filter.PassesComponentFilter(Comp))
+        {
+            continue;
+        }
+
+        // If this component opted out of AABB and the filter requires AABB data, skip it
+        if (!Comp->bComputeInstanceAABBs && Filter.bFilterByAABB && Filter.bExcludeIfAABBUnavailable)
+        {
+            continue;
+        }
+
+        // Coarse: does the query box overlap this component's aggregate bounds?
+        // Avoids per-instance work for distant components entirely.
+        if (Comp->IsBoundsValid())
+        {
+            // We'd love CachedInstanceBounds here — expose a getter if not already public
+            // For now fall through; individual GetInstancesOverlappingBox handles the rest
+        }
+
+        // Per-instance AABB test
+        TArray<int32> Overlapping = Comp->GetInstancesOverlappingBox(Box, false);
+
+        for (int32 Idx : Overlapping)
+        {
+            FISMInstanceHandle Handle = Comp->GetInstanceHandle(Idx);
+
+            if (Filter.PassesFilter(Handle))
+            {
+                Results.Add(Handle);
+            }
+
+            if (Filter.MaxResults > 0 && Results.Num() >= Filter.MaxResults)
+            {
+                return Results;
+            }
+        }
+    }
+
+    return Results;
+}
+
+
+// ============================================================
+//  QueryInstancesOverlappingInstance
+//  Finds all instances across all components whose AABB overlaps
+//  the given handle's AABB. The handle itself is excluded.
+// ============================================================
+
+TArray<FISMInstanceHandle> UISMRuntimeSubsystem::QueryInstancesOverlappingInstance(
+    const FISMInstanceHandle& Handle,
+    const FISMQueryFilter& Filter) const
+{
+    TArray<FISMInstanceHandle> Results;
+
+    UISMRuntimeComponent* OwnerComp = Handle.Component.Get();
+    if (!OwnerComp || !OwnerComp->bComputeInstanceAABBs)
+    {
+        return Results;
+    }
+
+    // Get the world-space AABB of the query instance
+    FBox QueryBounds = OwnerComp->GetInstanceWorldBounds(Handle.InstanceIndex);
+    if (!QueryBounds.IsValid)
+    {
+        return Results;
+    }
+
+    // Reuse the box query, then strip out the handle itself
+    Results = QueryInstancesOverlappingBox(QueryBounds, Filter);
+
+    Results.RemoveAllSwap([&Handle](const FISMInstanceHandle& Result)
+        {
+            return Result.Component == Handle.Component
+                && Result.InstanceIndex == Handle.InstanceIndex;
+        });
+
+    return Results;
+}
+
+
 FISMInstanceReference UISMRuntimeSubsystem::FindNearestInstance(
     const FVector& Location,
     const FISMQueryFilter& Filter,
@@ -353,6 +456,10 @@ FISMInstanceReference UISMRuntimeSubsystem::FindNearestInstance(
     
     return NearestRef;
 }
+
+
+
+
 
 UISMRuntimeComponent* UISMRuntimeSubsystem::FindComponentForInstance(const FISMInstanceReference& Instance) const
 {

@@ -358,7 +358,8 @@ void UISMRuntimeComponent::UpdateInstanceTransform(int32 InstanceIndex, const FT
     
     // Update ISM
     ManagedISMComponent->UpdateInstanceTransform(InstanceIndex, NewTransform, true, true);
-    
+    UpdateInstanceWorldBounds(InstanceIndex, NewTransform);
+
     // Update cached state
     if (FISMInstanceState* State = InstanceStates.Find(InstanceIndex))
     {
@@ -389,7 +390,7 @@ void UISMRuntimeComponent::UpdateInstanceTransform(int32 InstanceIndex, const FT
             ExpandBoundsToInclude(NewLocation);
         }
     }
-
+    
     if(bTriggerFeedbacks)
 		TriggerFeedbackOnTransformUpdateInternal(InstanceIndex, InstigatorComponent);
 }
@@ -578,8 +579,11 @@ void UISMRuntimeComponent::InitializeNewInstance(int32 InstanceIndex, const FTra
     // Start as intact
     State.SetFlag(EISMInstanceState::Intact, true);
 
+	UpdateInstanceWorldBounds(InstanceIndex, Transform);
+
     // Add default state tag
     AddInstanceTag(InstanceIndex, FGameplayTag::RequestGameplayTag("ISM.State.Intact"));
+
 }
 
 void UISMRuntimeComponent::OnInstanceAdded(int32 InstanceIndex, const FTransform& Transform)
@@ -805,6 +809,10 @@ TArray<int32> UISMRuntimeComponent::QueryInstances(const FVector& Location, floa
     // Get candidates from spatial index
     TArray<int32> Candidates;
     SpatialIndex.QueryRadius(Location, Radius, Candidates);
+	if (Candidates.Num() == 0)
+    {
+        return Candidates; 
+    }
 
     // Create instance references and filter
     TArray<int32> Results;
@@ -1046,6 +1054,294 @@ FISMInstanceState* UISMRuntimeComponent::GetInstanceStateMutable(int32 InstanceI
 {
     return InstanceStates.Find(InstanceIndex);
 }
+
+#pragma region AABB_QUERIES
+
+// ============================================================
+//  Private helper — the single place WorldBounds gets written
+// ============================================================
+
+void UISMRuntimeComponent::UpdateInstanceWorldBounds(int32 InstanceIndex, const FTransform& Transform)
+{
+    // Hard gate — if the component opted out, never touch bounds data
+    if (!bComputeInstanceAABBs)
+    {
+        return;
+    }
+
+    // Requires a DataAsset with valid cached local bounds
+    if (!InstanceData)
+    {
+        return;
+    }
+
+    FBox LocalBounds = InstanceData->GetEffectiveLocalBounds();
+    if (!LocalBounds.IsValid)
+    {
+        return;
+    }
+
+    // Transform the local box to world space.
+    // FBox::TransformBy handles non-uniform scale correctly by transforming
+    // all 8 corners and re-fitting, which is exactly what we want.
+    FBox WorldBounds = LocalBounds.TransformBy(Transform);
+
+    // Write into the instance state (creates entry if not present)
+    FISMInstanceState& State = InstanceStates.FindOrAdd(InstanceIndex);
+    State.WorldBounds = WorldBounds;
+    State.bBoundsValid = true;
+}
+
+
+// ============================================================
+//  Hook into existing lifecycle functions
+//  These calls need to be added to the bodies of:
+//    - InitializeNewInstance()
+//    - UpdateInstanceTransform()
+//  Since we can't modify those files here, the calls are shown
+//  as standalone functions that delegate to UpdateInstanceWorldBounds.
+// ============================================================
+
+// Call this at the END of InitializeNewInstance(), after state is set up:
+//   UpdateInstanceWorldBounds(InstanceIndex, Transform);
+
+// Call this at the END of UpdateInstanceTransform(), after the ISM call:
+//   UpdateInstanceWorldBounds(InstanceIndex, NewTransform);
+
+
+// ============================================================
+//  GetInstanceWorldBounds
+// ============================================================
+
+FBox UISMRuntimeComponent::GetInstanceWorldBounds(int32 InstanceIndex) const
+{
+    if (!bComputeInstanceAABBs)
+    {
+        return FBox(EForceInit::ForceInit);
+    }
+
+    if (!IsValidInstanceIndex(InstanceIndex))
+    {
+        return FBox(EForceInit::ForceInit);
+    }
+
+    const FISMInstanceState* State = GetInstanceState(InstanceIndex);
+    if (!State )
+    {
+        return FBox(EForceInit::ForceInit);
+    }
+	if (!State->bBoundsValid)
+    {
+        return FBox(EForceInit::ForceInit);
+    }
+
+    return State->WorldBounds;
+}
+
+
+// ============================================================
+//  GetInstancesOverlappingBox
+// ============================================================
+
+TArray<int32> UISMRuntimeComponent::GetInstancesOverlappingBox(
+    const FBox& Box,
+    bool bIncludeDestroyed) const
+{
+    TArray<int32> Results;
+
+    if (!bComputeInstanceAABBs)
+    {
+		UE_LOG(LogTemp, Warning, TEXT("ISMRuntimeComponent: Cannot perform box query - AABB computation is disabled"));
+        return Results;
+    }
+
+    // Expand the candidate search box by the max local extent so instances
+    // whose centers are outside Box but whose AABBs overlap it are included
+    // as candidates. The precise AABB intersection test is the second pass.
+    FBox CandidateBox = Box;
+    if (InstanceData)
+    {
+        FBox LocalBounds = InstanceData->GetEffectiveLocalBounds();
+        if (LocalBounds.IsValid)
+        {
+            // GetExtent() is half-size. Expand by full extent to be safe
+            // since scale can push the bounds further than the local extent.
+            // A more precise expansion would track max scale, but this is
+            // conservative and correct.
+            FVector MaxExtent = LocalBounds.GetExtent();
+            CandidateBox = Box.ExpandBy(MaxExtent);
+        }
+    }
+
+    TArray<int32> Candidates = GetInstancesInBox(CandidateBox, bIncludeDestroyed);
+	UE_LOG(LogTemp, Verbose, TEXT("ISMRuntimeComponent: Box query found %d candidates"), Candidates.Num());
+    Results.Reserve(Candidates.Num());
+    for (int32 CandidateIndex : Candidates)
+    {
+        const FISMInstanceState* State = GetInstanceState(CandidateIndex);
+        if (!State || !State->bBoundsValid)
+        {
+			UE_LOG(LogTemp, Warning, TEXT("ISMRuntimeComponent: No valid bounds for instance %d during box query"), CandidateIndex);
+            continue;
+        }
+
+        if (State->WorldBounds.Intersect(Box))
+        {
+            Results.Add(CandidateIndex);
+        }
+    }
+
+    return Results;
+}
+
+
+// ============================================================
+//  GetInstancesOverlappingSphere
+// ============================================================
+
+TArray<int32> UISMRuntimeComponent::GetInstancesOverlappingSphere(
+    const FVector& Center,
+    float Radius,
+    bool bIncludeDestroyed) const
+{
+    TArray<int32> Results;
+
+    if (!bComputeInstanceAABBs || Radius <= 0.0f)
+    {
+        return Results;
+    }
+
+    float CandidateRadius = Radius;
+    if (InstanceData)
+    {
+        FBox LocalBounds = InstanceData->GetEffectiveLocalBounds();
+        if (LocalBounds.IsValid)
+        {
+            CandidateRadius += LocalBounds.GetExtent().Size();
+        }
+    }
+
+    TArray<int32> Candidates = GetInstancesInRadius(Center, CandidateRadius, bIncludeDestroyed);
+
+    Results.Reserve(Candidates.Num());
+    for (int32 CandidateIndex : Candidates)
+    {
+        const FISMInstanceState* State = GetInstanceState(CandidateIndex);
+        if (!State || !State->bBoundsValid)
+        {
+            continue;
+        }
+
+        float DistSq = State->WorldBounds.ComputeSquaredDistanceToPoint(Center);
+        if (DistSq <= FMath::Square(Radius))
+        {
+            Results.Add(CandidateIndex);
+        }
+    }
+
+    return Results;
+}
+
+
+// ============================================================
+//  GetInstancesOverlappingInstance
+// ============================================================
+
+TArray<int32> UISMRuntimeComponent::GetInstancesOverlappingInstance(
+    int32 InstanceIndex,
+    bool bIncludeDestroyed) const
+{
+    TArray<int32> Results;
+
+    if (!bComputeInstanceAABBs || !IsValidInstanceIndex(InstanceIndex))
+    {
+        return Results;
+    }
+
+    const FISMInstanceState* QueryState = GetInstanceState(InstanceIndex);
+    if (!QueryState || !QueryState->bBoundsValid)
+    {
+        return Results;
+    }
+
+    FBox QueryBounds = QueryState->WorldBounds;
+
+    // Use the box query to get candidates, then filter by AABB intersection
+    TArray<int32> Candidates = GetInstancesOverlappingBox(QueryBounds, bIncludeDestroyed);
+
+    Results.Reserve(Candidates.Num());
+
+    for (int32 CandidateIndex : Candidates)
+    {
+        // Exclude the query instance itself
+        if (CandidateIndex == InstanceIndex)
+        {
+            continue;
+        }
+
+        Results.Add(CandidateIndex);
+    }
+
+    return Results;
+}
+
+
+// ============================================================
+//  DoInstancesOverlap
+// ============================================================
+
+bool UISMRuntimeComponent::DoInstancesOverlap(int32 IndexA, int32 IndexB) const
+{
+    if (!bComputeInstanceAABBs)
+    {
+        return false;
+    }
+
+    if (!IsValidInstanceIndex(IndexA) || !IsValidInstanceIndex(IndexB))
+    {
+        return false;
+    }
+
+    const FISMInstanceState* StateA = GetInstanceState(IndexA);
+    const FISMInstanceState* StateB = GetInstanceState(IndexB);
+
+    if (!StateA || !StateA->bBoundsValid || !StateB || !StateB->bBoundsValid)
+    {
+        return false;
+    }
+
+    return StateA->WorldBounds.Intersect(StateB->WorldBounds);
+}
+
+
+// ============================================================
+//  DoesInstanceOverlapBox
+// ============================================================
+
+bool UISMRuntimeComponent::DoesInstanceOverlapBox(int32 InstanceIndex, const FBox& Box) const
+{
+    if (!bComputeInstanceAABBs)
+    {
+        return false;
+    }
+
+    if (!IsValidInstanceIndex(InstanceIndex))
+    {
+        return false;
+    }
+
+    const FISMInstanceState* State = GetInstanceState(InstanceIndex);
+    if (!State || !State->bBoundsValid)
+    {
+        return false;
+    }
+
+    return State->WorldBounds.Intersect(Box);
+}
+
+
+#pragma endregion
+
 
 // ===== Conversion Tracking =====
 

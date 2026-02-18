@@ -42,6 +42,13 @@ struct ISMRUNTIMECORE_API FISMInstanceState
     
     /** Whether cached transform is valid */
     bool bTransformCached = false;
+
+
+    /** World-space AABB for this instance. Only valid when owning component has bComputeInstanceAABBs = true. */
+    FBox WorldBounds;
+
+    /** Whether WorldBounds is currently valid */
+    bool bBoundsValid = false;
     
     /** Custom data pointer for module-specific state (damage values, resource data, etc.) */
     void* ModuleData = nullptr;
@@ -86,4 +93,14 @@ struct ISMRUNTIMECORE_API FISMInstanceState
         SetFlag(EISMInstanceState::Damaged, false);
         SetFlag(EISMInstanceState::Destroyed, true);
     }
+
+    bool OverlapsWith(const FBox& Other) const
+    {
+		return bBoundsValid && WorldBounds.Intersect(Other);
+    }
+
+    bool Contains(const FVector& Point) const
+    {
+        return bBoundsValid && WorldBounds.IsInside(Point);
+	}
 };

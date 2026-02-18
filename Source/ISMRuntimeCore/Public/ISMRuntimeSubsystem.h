@@ -91,6 +91,19 @@ public:
         const FVector& Location,
         const FISMQueryFilter& Filter,
         float MaxDistance = -1.0f) const;
+
+
+    /** Find all instances across all components whose AABB overlaps the given box */
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Query")
+    TArray<FISMInstanceHandle> QueryInstancesOverlappingBox(
+        const FBox& Box,
+        const FISMQueryFilter& Filter) const;
+
+    /** Find all instances whose AABB overlaps a given instance's AABB (cross-component) */
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Query")
+    TArray<FISMInstanceHandle> QueryInstancesOverlappingInstance(
+        const FISMInstanceHandle& Handle,
+        const FISMQueryFilter& Filter) const;
     
     /** Find component that owns a specific instance */
     UISMRuntimeComponent* FindComponentForInstance(const FISMInstanceReference& Instance) const;

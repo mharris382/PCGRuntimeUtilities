@@ -112,4 +112,37 @@ public:
         const FString* Value = CustomStringParameters.Find(ParameterName);
         return Value ? *Value : DefaultValue;
     }
+
+    // In UISMInstanceDataAsset
+
+    /** Cached local-space bounds of the static mesh. Auto-populated when mesh is set. */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bounds")
+    FBox CachedLocalBounds;
+
+    /** Padding added symmetrically to the cached bounds in all axes (cm) */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bounds", meta=(ClampMin="0.0"))
+    float BoundsPadding = 0.0f;
+
+    /** Additional per-axis padding for non-uniform adjustments */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bounds")
+    FVector BoundsPaddingExtent = FVector::ZeroVector;
+
+    /** Manually override the cached bounds instead of deriving from mesh */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bounds")
+    bool bOverrideBounds = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bounds", meta=(EditCondition="bOverrideBounds"))
+    FBox BoundsOverride;
+
+    /** Get the effective local bounds (with padding applied) */
+    FBox GetEffectiveLocalBounds() const;
+
+    #if WITH_EDITOR
+    /** Refresh cached bounds from the current StaticMesh. Called automatically when mesh changes. */
+    void RefreshCachedBounds();
+    
+    virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+
+   
+    #endif
 };

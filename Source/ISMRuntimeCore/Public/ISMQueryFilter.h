@@ -59,6 +59,23 @@ struct ISMRUNTIMECORE_API FISMQueryFilter
     /** Sort results by distance (closest first) */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Filter|Limits")
     bool bSortByDistance = false;
+
+
+    // ===== AABB Filtering =====
+
+    /** If set, only return instances whose AABB overlaps this box.
+    Requires bComputeInstanceAABBs on the owning component. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Filter|AABB")
+    FBox AABBOverlapBox = FBox(EForceInit::ForceInit);
+
+    /** Whether AABBOverlapBox is active (IsValid() check equivalent) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Filter|AABB")
+    bool bFilterByAABB = false;
+
+    /** If true, instances on components with bComputeInstanceAABBs=false
+        are excluded when bFilterByAABB is active. If false, they pass through. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Filter|AABB")
+    bool bExcludeIfAABBUnavailable = false;
     
     // ===== Custom Filter (C++ only) =====
     

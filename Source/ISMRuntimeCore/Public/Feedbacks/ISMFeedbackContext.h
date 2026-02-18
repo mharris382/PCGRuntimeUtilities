@@ -331,7 +331,7 @@ struct ISMRUNTIMECORE_API FISMFeedbackContext
      * Example: "BiomeName", "WeatherCondition", "CustomAudioEvent"
      */
     //UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Feedback|Custom")
-    //TMap<FName, FString> CustomStringParameters;
+    //TMap<FName    , FString> CustomStringParameters;
 
     /**
      * Custom object references for advanced scenarios.

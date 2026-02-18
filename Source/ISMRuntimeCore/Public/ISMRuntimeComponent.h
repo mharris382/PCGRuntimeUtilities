@@ -250,12 +250,28 @@ public:
         FVector GetInstanceLocation(int32 InstanceIndex) const;
 #pragma endregion
 
+    protected:
+        /**
+         * Initialize state for a newly added instance.
+         * Called automatically by AddInstance.
+         */
+        virtual void InitializeNewInstance(int32 InstanceIndex, const FTransform& Transform);
+
+        /**
+         * Hook for subclasses to customize new instance initialization.
+         * Called after state is initialized but before spatial index update.
+         */
+        virtual void OnInstanceAdded(int32 InstanceIndex, const FTransform& Transform);
+
+        
     
 
     // ===== Spatial Queries =====
     
 #pragma region SPATIAL_QUERIES
-                    /** Find instances within radius of a location */
+public:
+    
+    /** Find instances within radius of a location */
     UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Query")
     TArray<int32> GetInstancesInRadius(const FVector& Location, float Radius, bool bIncludeDestroyed = false) const;
 
@@ -282,11 +298,43 @@ public:
 
 #pragma endregion
 
+#pragma region AABB_QUERIES
+
+    // Get world AABB for a specific instance. Returns invalid box if opt-out or index invalid.
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|AABB")
+    FBox GetInstanceWorldBounds(int32 InstanceIndex) const;
+
+    // Find all instances whose AABB overlaps the given box.
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|AABB")
+    TArray<int32> GetInstancesOverlappingBox(const FBox& Box, bool bIncludeDestroyed = false) const;
+
+    // Find all instances whose AABB overlaps the given sphere (center + radius).
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|AABB")
+    TArray<int32> GetInstancesOverlappingSphere(const FVector& Center, float Radius, bool bIncludeDestroyed = false) const;
+
+    // Find all instances whose AABB overlaps another instance's AABB.
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|AABB")
+    TArray<int32> GetInstancesOverlappingInstance(int32 InstanceIndex, bool bIncludeDestroyed = false) const;
+
+    // Check if two specific instances overlap each other.
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|AABB")
+    bool DoInstancesOverlap(int32 IndexA, int32 IndexB) const;
+
+    // Check if a specific instance overlaps a given world box.
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|AABB")
+    bool DoesInstanceOverlapBox(int32 InstanceIndex, const FBox& Box) const;
+
+private:
+        // Recomputes and stores WorldBounds in state. No-op if bComputeInstanceAABBs = false.
+        void UpdateInstanceWorldBounds(int32 InstanceIndex, const FTransform& Transform);
+
+#pragma endregion
 
     // ===== Conversion Tracking =====
 
 #pragma region CONVERSION_TRACKING
 
+public:
                     /** Get a handle for an instance */
     UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
     FISMInstanceHandle GetInstanceHandle(int32 InstanceIndex);
@@ -404,27 +452,30 @@ protected:
 
 #pragma endregion
 
+#pragma region INTERNAL_STATE
     
     // ===== Internal State =====
-    
-    /** Spatial index for fast queries */
+
+/** Spatial index for fast queries */
     FISMSpatialIndex SpatialIndex;
-    
+
     /** Per-instance state (sparse map - only active instances) */
     UPROPERTY()
     TMap<int32, FISMInstanceState> InstanceStates;
-    
+
     /** Cached subsystem reference */
     TWeakObjectPtr<class UISMRuntimeSubsystem> CachedSubsystem;
-    
+
     /** Whether this component has been initialized */
     bool bIsInitialized = false;
-    
+
     /** Time accumulator for tick interval */
     float TimeSinceLastTick = 0.0f;
 
     /** Map of instance index to handle (for tracking conversions) */
     TMap<int32, FISMInstanceHandle> InstanceHandles;
+#pragma endregion
+
 
     
     // ===== Helper Functions =====
@@ -445,13 +496,20 @@ protected:
     void BroadcastTagChange(int32 InstanceIndex);
 
 
-
     /** Get or create a handle for an instance */
     FISMInstanceHandle& GetOrCreateHandle(int32 InstanceIndex);
 
+
+
     // ===== Bounds Management =====
+
+#pragma region BOUNDS
+
 public:
-    
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime|Performance")
+    bool bComputeInstanceAABBs = true;
+
     /**
      * Recalculate bounds from all active instances.
      * O(n) operation - use sparingly!
@@ -459,14 +517,14 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Bounds")
     void RecalculateInstanceBounds();
-    
+
     /**
      * Incrementally expand bounds to include a new location.
      * O(1) operation - safe to call frequently.
      * Does NOT shrink bounds if location is inside existing bounds.
      */
     void ExpandBoundsToInclude(const FVector& Location);
-    
+
     /**
      * Invalidate bounds cache, forcing recalculation on next query.
      * Use when you know bounds have changed but don't want to recalculate immediately.
@@ -476,92 +534,88 @@ public:
 
 
     UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Bounds")
-	bool IsBoundsValid() const { return bBoundsValid; }
-    
+    bool IsBoundsValid() const { return bBoundsValid; }
+
 protected:
     /** Cached bounds of all active instances */
     UPROPERTY(BlueprintReadOnly, Category = "ISM Runtime|Bounds")
     FBox CachedInstanceBounds;
-    
+
     /** Whether cached bounds are currently valid */
     bool bBoundsValid = false;
-    
+
     /** Padding to add to bounds (accounts for instance size/scale) */
-    UPROPERTY(EditAnywhere, Category = "ISM Runtime|Performance", meta=(ClampMin="0.0"))
+    UPROPERTY(EditAnywhere, Category = "ISM Runtime|Performance", meta = (ClampMin = "0.0"))
     float BoundsPadding = 100.0f;
-    
-    /** 
+
+    /**
      * Check if a location is on the edge of the bounds.
      * Used to determine if removing an instance requires full bounds recalculation.
      */
     bool IsLocationOnBoundsEdge(const FVector& Location, float Tolerance = 10.0f) const;
+#pragma endregion
 
 
 
-    protected:
-        /**
-         * Initialize state for a newly added instance.
-         * Called automatically by AddInstance.
-         */
-        virtual void InitializeNewInstance(int32 InstanceIndex, const FTransform& Transform);
-
-        /**
-         * Hook for subclasses to customize new instance initialization.
-         * Called after state is initialized but before spatial index update.
-         */
-        virtual void OnInstanceAdded(int32 InstanceIndex, const FTransform& Transform);
+    
 
 
 
-        
+
+
+
+#pragma region FEEDBACKS
+
         // ===== Feedback Helpers ===== (NEW SECTION)
     public:
-    
-    /**
-     * Get the effective feedback tags for this component.
-     * Merges component defaults with instance data overrides.
-     */
-    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Feedback")
-    FISMFeedbackTags GetEffectiveFeedbackTags() const;
-    
-    /**
-     * Manually trigger feedback for an instance.
-     * Useful for custom events or testing.
-     * 
-     * @param InstanceIndex The instance to trigger feedback for
-     * @param FeedbackTag The feedback tag to trigger
-     * @param Intensity Feedback intensity (0-1)
-     */
-    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Feedback")
-    bool TriggerInstanceFeedback(int32 InstanceIndex, FGameplayTag FeedbackTag, float Intensity = 1.0f);
-    
+
+        /**
+         * Get the effective feedback tags for this component.
+         * Merges component defaults with instance data overrides.
+         */
+        UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Feedback")
+        FISMFeedbackTags GetEffectiveFeedbackTags() const;
+
+        /**
+         * Manually trigger feedback for an instance.
+         * Useful for custom events or testing.
+         *
+         * @param InstanceIndex The instance to trigger feedback for
+         * @param FeedbackTag The feedback tag to trigger
+         * @param Intensity Feedback intensity (0-1)
+         */
+        UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Feedback")
+        bool TriggerInstanceFeedback(int32 InstanceIndex, FGameplayTag FeedbackTag, float Intensity = 1.0f);
+
 protected:
     // ===== Feedback Implementation ===== (NEW SECTION)
-    
+
     /**
      * Internal helper to trigger feedback for an instance.
      * Called by lifecycle methods when bTriggerFeedback=true.
      */
     bool TriggerFeedbackInternal(int32 InstanceIndex, FGameplayTag FeedbackTag, float Intensity = 1.0f);
-    
+
     /**
      * Get the feedback subsystem (cached for performance).
      */
     class UISMFeedbackSubsystem* GetFeedbackSubsystem() const;
-    
+
     /** Cached feedback subsystem reference */
     mutable TWeakObjectPtr<class UISMFeedbackSubsystem> CachedFeedbackSubsystem;
 
     private:
-        void TriggerFeedbackOnDestroyInternal(int InstanceIndex                 , const UActorComponent* Instigator);
-        void TriggerFeedbackOnSpawnInternal(int InstanceIndex                   , const UActorComponent* Instigator);
-        void TriggerFeedbackOnHideInternal(int InstanceIndex                    , const UActorComponent* Instigator);
-        void TriggerFeedbackOnShowInternal(int InstanceIndex                    , const UActorComponent* Instigator);
-        void TriggerFeedbackOnTransformUpdateInternal(int InstanceIndex         , const UActorComponent* Instigator);
-        void TriggerFeedbackBatchedOnSpawnInternal(TArray<int> InstanceIndexes  , const UActorComponent* Instigator);
+        void TriggerFeedbackOnDestroyInternal(int InstanceIndex, const UActorComponent* Instigator);
+        void TriggerFeedbackOnSpawnInternal(int InstanceIndex, const UActorComponent* Instigator);
+        void TriggerFeedbackOnHideInternal(int InstanceIndex, const UActorComponent* Instigator);
+        void TriggerFeedbackOnShowInternal(int InstanceIndex, const UActorComponent* Instigator);
+        void TriggerFeedbackOnTransformUpdateInternal(int InstanceIndex, const UActorComponent* Instigator);
+        void TriggerFeedbackBatchedOnSpawnInternal(TArray<int> InstanceIndexes, const UActorComponent* Instigator);
         void TriggerFeedbackBatchedOnDestroyInternal(TArray<int> InstanceIndexes, const UActorComponent* Instigator);
 
         void TriggerFeedbackInternal(TFunctionRef<FGameplayTag(const FISMFeedbackTags&)> SelectTag, int InstanceIndex, const UActorComponent* Instigator);
         void TriggerFeedbackBatchedInternal(TFunctionRef<FGameplayTag(const FISMFeedbackTags&)> SelectTag, TArray<int> InstanceIndexes, const UActorComponent* Instigator);
-        
+
+#pragma endregion
+
 };

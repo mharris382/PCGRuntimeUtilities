@@ -3,7 +3,10 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "GameplayTagContainer.h"
+#include "Feedbacks/ISMFeedbackTags.h"
 #include "ISMInstanceDataAsset.generated.h"
+
+
 
 /**
  * Data asset defining properties and behavior for ISM instances.
@@ -30,6 +33,23 @@ public:
     /** Default tags to apply to components using this data asset */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tags")
     FGameplayTagContainer DefaultTags;
+
+    
+     // ===== Feedback Configuration ===== (NEW SECTION)
+    
+    /**
+     * Feedback tags for common ISM lifecycle events.
+     * These override the component's default feedback tags.
+     * Leave tags empty to use component defaults or disable feedback.
+     * 
+     * Example:
+     * - OnSpawn = "Feedback.ISM.Spawn.Tree"
+     * - OnDestroy = "Feedback.ISM.Destroy.Tree"
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tags",
+        meta=(ShowOnlyInnerProperties))
+    FISMFeedbackTags FeedbackTags;
+    
     
     // ===== Visual Settings =====
     

@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "GameplayTagContainer.h"
 #include "ISMSpatialIndex.h"
+#include "Feedbacks/ISMFeedbackTags.h"
 #include "ISMInstanceHandle.h"
 #include "Delegates/DelegateCombinations.h"
 #include "Interfaces/ISMStateProvider.h"
@@ -15,6 +16,7 @@ class UISMInstanceDataAsset;
 
 struct FISMQueryFilter;
 struct FISMInstanceState;
+struct FISMFeedbackParticipant;
 
 /**
  * Delegate signatures for instance events
@@ -78,6 +80,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime|Tags")
     FGameplayTagContainer ISMComponentTags;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime|Tags", meta = (Tooltip="Default Feedback Tags used for ISM Runtime Feedbacks, which is used when the InstanceDataAsset doesn't provide any Feedback Tags"))
+    FISMFeedbackTags DefaultFeedbackTags;
+
     /** Per-instance tags (sparse - only instances with unique tags) */
     UPROPERTY()
     TMap<int32, FGameplayTagContainer> PerInstanceTags;
@@ -123,7 +128,7 @@ public:
     virtual bool InitializeInstances();
 
 
-    
+    bool IsValidInstanceIndex(int32 InstanceIndex) const;
 
 
     /**
@@ -132,7 +137,8 @@ public:
      * @param bUpdateBounds Whether to recalculate bounds after hiding (expensive O(n) operation)
      */
     UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    virtual void HideInstance(int32 InstanceIndex, bool bUpdateBounds = false);
+    virtual void HideInstance(int32 InstanceIndex, bool bUpdateBounds = false, 
+        bool bTriggerFeedbacks = true, const UActorComponent* InstigatorComponent = nullptr);
 
     /**
      * Show a previously hidden instance.
@@ -140,7 +146,8 @@ public:
      * @param bUpdateBounds Whether to recalculate bounds after showing (expensive O(n) operation)
      */
     UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-    virtual void ShowInstance(int32 InstanceIndex, bool bUpdateBounds = false);
+    virtual void ShowInstance(int32 InstanceIndex, bool bUpdateBounds = false, 
+        bool bTriggerFeedbacks = true, const UActorComponent* InstigatorComponent = nullptr);
 
 
     
@@ -153,7 +160,8 @@ public:
              */
             UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
             virtual void UpdateInstanceTransform(int32 InstanceIndex, const FTransform& NewTransform, 
-                bool bUpdateSpatialIndex = true, bool bUpdateBounds = false);
+                bool bUpdateSpatialIndex = true, bool bUpdateBounds = false, 
+                bool bTriggerFeedbacks = true, const UActorComponent* InstigatorComponent = nullptr);
         
           /**
             * Destroy an instance (hides it and marks as destroyed, but index remains valid).
@@ -161,7 +169,8 @@ public:
             * @param bUpdateBounds Whether to recalculate bounds after destruction (expensive O(n) operation)
             */
             UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-            virtual void DestroyInstance(int32 InstanceIndex, bool bUpdateBounds = false);
+            virtual void DestroyInstance(int32 InstanceIndex, bool bUpdateBounds = false,
+                bool bTriggerFeedbacks = true, const UActorComponent* InstigatorComponent = nullptr);
 
             /**
              * Batch destroy multiple instances efficiently.
@@ -170,9 +179,10 @@ public:
              * @param bUpdateBounds Whether to recalculate bounds after all destructions (one O(n) operation)
              */
             UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-            void BatchDestroyInstances(const TArray<int32>& InstanceIndices, bool bUpdateBounds = false);
+            void BatchDestroyInstances(const TArray<int32>& InstanceIndices, bool bUpdateBounds = false,
+                bool bTriggerFeedbacks = true, const UActorComponent* InstigatorComponent = nullptr);
 
-
+            //
            // ===== Instance Creation =====
 
            /**
@@ -183,7 +193,8 @@ public:
             * @return Index of the newly added instance, or INDEX_NONE if failed
             */
         UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-        int32 AddInstance(const FTransform& Transform, bool bUpdateBounds = true);
+        int32 AddInstance(const FTransform& Transform, bool bUpdateBounds = true,
+            bool bTriggerFeedbacks = true, const UActorComponent* InstigatorComponent = nullptr);
 
         /**
          * Add multiple instances efficiently in a batch.
@@ -193,7 +204,9 @@ public:
          * @return Array of indices for newly added instances (INDEX_NONE for any that failed)
          */
         UFUNCTION(BlueprintCallable, Category = "ISM Runtime")
-        TArray<int32> BatchAddInstances(const TArray<FTransform>& Transforms, bool bUpdateBounds = true, bool bShouldReturnIndices = true, bool bUpdateNavigation = false);
+        TArray<int32> BatchAddInstances(const TArray<FTransform>& Transforms, bool bUpdateBounds = true,
+            bool bShouldReturnIndices = true, bool bUpdateNavigation = false, 
+            bool bTriggerFeedbacks = true, const UActorComponent* InstigatorComponent = nullptr);
 
         /**
          * Add instances with custom data.
@@ -238,6 +251,7 @@ public:
 #pragma endregion
 
     
+
     // ===== Spatial Queries =====
     
 #pragma region SPATIAL_QUERIES
@@ -419,7 +433,7 @@ protected:
     FGameplayTagContainer GetEffectiveTagsForInstance(int32 InstanceIndex) const;
     
     /** Validate instance index */
-    bool IsValidInstanceIndex(int32 InstanceIndex) const;
+    
     
     /** Broadcast state change event */
     void BroadcastStateChange(int32 InstanceIndex);
@@ -496,4 +510,58 @@ protected:
          * Called after state is initialized but before spatial index update.
          */
         virtual void OnInstanceAdded(int32 InstanceIndex, const FTransform& Transform);
+
+
+
+        
+        // ===== Feedback Helpers ===== (NEW SECTION)
+    public:
+    
+    /**
+     * Get the effective feedback tags for this component.
+     * Merges component defaults with instance data overrides.
+     */
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Feedback")
+    FISMFeedbackTags GetEffectiveFeedbackTags() const;
+    
+    /**
+     * Manually trigger feedback for an instance.
+     * Useful for custom events or testing.
+     * 
+     * @param InstanceIndex The instance to trigger feedback for
+     * @param FeedbackTag The feedback tag to trigger
+     * @param Intensity Feedback intensity (0-1)
+     */
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Feedback")
+    bool TriggerInstanceFeedback(int32 InstanceIndex, FGameplayTag FeedbackTag, float Intensity = 1.0f);
+    
+protected:
+    // ===== Feedback Implementation ===== (NEW SECTION)
+    
+    /**
+     * Internal helper to trigger feedback for an instance.
+     * Called by lifecycle methods when bTriggerFeedback=true.
+     */
+    bool TriggerFeedbackInternal(int32 InstanceIndex, FGameplayTag FeedbackTag, float Intensity = 1.0f);
+    
+    /**
+     * Get the feedback subsystem (cached for performance).
+     */
+    class UISMFeedbackSubsystem* GetFeedbackSubsystem() const;
+    
+    /** Cached feedback subsystem reference */
+    mutable TWeakObjectPtr<class UISMFeedbackSubsystem> CachedFeedbackSubsystem;
+
+    private:
+        void TriggerFeedbackOnDestroyInternal(int InstanceIndex                 , const UActorComponent* Instigator);
+        void TriggerFeedbackOnSpawnInternal(int InstanceIndex                   , const UActorComponent* Instigator);
+        void TriggerFeedbackOnHideInternal(int InstanceIndex                    , const UActorComponent* Instigator);
+        void TriggerFeedbackOnShowInternal(int InstanceIndex                    , const UActorComponent* Instigator);
+        void TriggerFeedbackOnTransformUpdateInternal(int InstanceIndex         , const UActorComponent* Instigator);
+        void TriggerFeedbackBatchedOnSpawnInternal(TArray<int> InstanceIndexes  , const UActorComponent* Instigator);
+        void TriggerFeedbackBatchedOnDestroyInternal(TArray<int> InstanceIndexes, const UActorComponent* Instigator);
+
+        void TriggerFeedbackInternal(TFunctionRef<FGameplayTag(const FISMFeedbackTags&)> SelectTag, int InstanceIndex, const UActorComponent* Instigator);
+        void TriggerFeedbackBatchedInternal(TFunctionRef<FGameplayTag(const FISMFeedbackTags&)> SelectTag, TArray<int> InstanceIndexes, const UActorComponent* Instigator);
+        
 };

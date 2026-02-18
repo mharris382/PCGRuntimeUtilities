@@ -4,9 +4,16 @@
 #include "ISMRuntimeComponent.h"
 #include "ISMRuntimeSubsystem.h"
 #include "ISMInstanceDataAsset.h"
+#include "GameplayTagContainer.h"
+#include "Feedbacks/ISMFeedbackContext.h"
+#include "Feedbacks/ISMFeedbackTags.h"
+#include "Feedbacks/ISMFeedbackSubsystem.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "PhysicalMaterials/PhysicalMaterial.h"
 #include "GameplayTagsManager.h"
 #include "Engine/World.h"
+
+
 
 UISMRuntimeComponent::UISMRuntimeComponent()
 {
@@ -175,7 +182,7 @@ void UISMRuntimeComponent::OnInitializationComplete()
     // Subclasses can override for post-init logic
 }
 
-void UISMRuntimeComponent::DestroyInstance(int32 InstanceIndex, bool bUpdateBounds)
+void UISMRuntimeComponent::DestroyInstance(int32 InstanceIndex, bool bUpdateBounds, bool bTriggerFeedbacks, const UActorComponent* InstigatorComponent)
 {
     if (!IsValidInstanceIndex(InstanceIndex))
     {
@@ -240,9 +247,12 @@ void UISMRuntimeComponent::DestroyInstance(int32 InstanceIndex, bool bUpdateBoun
         // Instance was inside bounds, removal doesn't affect bounds
         // No recalculation needed - O(1)
     }
+
+    if(bTriggerFeedbacks)
+		TriggerFeedbackOnDestroyInternal(InstanceIndex, InstigatorComponent);
 }
 
-void UISMRuntimeComponent::HideInstance(int32 InstanceIndex, bool bUpdateBounds)
+void UISMRuntimeComponent::HideInstance(int32 InstanceIndex, bool bUpdateBounds, bool bTriggerFeedbacks, const UActorComponent* InstigatorComponent)
 {
     if (!IsValidInstanceIndex(InstanceIndex))
     {
@@ -285,9 +295,12 @@ void UISMRuntimeComponent::HideInstance(int32 InstanceIndex, bool bUpdateBounds)
     {
         RecalculateInstanceBounds();
     }
+
+    if(bTriggerFeedbacks)
+		TriggerFeedbackOnHideInternal(InstanceIndex, InstigatorComponent);
 }
 
-void UISMRuntimeComponent::ShowInstance(int32 InstanceIndex, bool bUpdateBounds)
+void UISMRuntimeComponent::ShowInstance(int32 InstanceIndex, bool bUpdateBounds, bool bTriggerFeedbacks, const UActorComponent* InstigatorComponent)
 {
     if (!IsValidInstanceIndex(InstanceIndex))
     {
@@ -326,10 +339,13 @@ void UISMRuntimeComponent::ShowInstance(int32 InstanceIndex, bool bUpdateBounds)
     {
         ExpandBoundsToInclude(VisibleTransform.GetLocation());
     }
+
+    if(bTriggerFeedbacks)
+		TriggerFeedbackOnShowInternal(InstanceIndex, InstigatorComponent);
 }
 
 void UISMRuntimeComponent::UpdateInstanceTransform(int32 InstanceIndex, const FTransform& NewTransform, 
-    bool bUpdateSpatialIndex, bool bUpdateBounds)
+    bool bUpdateSpatialIndex, bool bUpdateBounds, bool bTriggerFeedbacks, const UActorComponent* InstigatorComponent)
 {
     if (!IsValidInstanceIndex(InstanceIndex))
     {
@@ -373,9 +389,12 @@ void UISMRuntimeComponent::UpdateInstanceTransform(int32 InstanceIndex, const FT
             ExpandBoundsToInclude(NewLocation);
         }
     }
+
+    if(bTriggerFeedbacks)
+		TriggerFeedbackOnTransformUpdateInternal(InstanceIndex, InstigatorComponent);
 }
 
-void UISMRuntimeComponent::BatchDestroyInstances(const TArray<int32>& InstanceIndices, bool bUpdateBounds)
+void UISMRuntimeComponent::BatchDestroyInstances(const TArray<int32>& InstanceIndices, bool bUpdateBounds, bool bTriggerFeedbacks, const UActorComponent* InstigatorComponent)
 {
     if (InstanceIndices.Num() == 0)
     {
@@ -393,9 +412,13 @@ void UISMRuntimeComponent::BatchDestroyInstances(const TArray<int32>& InstanceIn
     {
         RecalculateInstanceBounds();
     }
+    if (bTriggerFeedbacks)
+    {
+		TriggerFeedbackBatchedOnDestroyInternal(InstanceIndices, InstigatorComponent);  
+    }
 }
 
-int32 UISMRuntimeComponent::AddInstance(const FTransform& Transform, bool bUpdateBounds)
+int32 UISMRuntimeComponent::AddInstance(const FTransform& Transform, bool bUpdateBounds, bool bTriggerFeedbacks, const UActorComponent* InstigatorComponent)
 {
     if (!ManagedISMComponent)
     {
@@ -430,13 +453,16 @@ int32 UISMRuntimeComponent::AddInstance(const FTransform& Transform, bool bUpdat
         ExpandBoundsToInclude(Transform.GetLocation());
     }
 
+    if(bTriggerFeedbacks)
+		TriggerFeedbackOnSpawnInternal(NewIndex, InstigatorComponent);
+
     // Notify subclass
     OnInstanceAdded(NewIndex, Transform);
 
     return NewIndex;
 }
 
-TArray<int32> UISMRuntimeComponent::BatchAddInstances(const TArray<FTransform>& Transforms, bool bUpdateBounds, bool bReturnInstances, bool bRegenerateNavigation)
+TArray<int32> UISMRuntimeComponent::BatchAddInstances(const TArray<FTransform>& Transforms, bool bUpdateBounds, bool bReturnInstances, bool bRegenerateNavigation, bool bTriggerFeedbacks, const UActorComponent* InstigatorComponent)
 {
     TArray<int32> NewIndices;
     NewIndices.Reserve(Transforms.Num());
@@ -561,6 +587,7 @@ void UISMRuntimeComponent::OnInstanceAdded(int32 InstanceIndex, const FTransform
     // Base implementation does nothing
     // Subclasses override for custom initialization
 }
+
 
 
 
@@ -1138,3 +1165,130 @@ void UISMRuntimeComponent::OnInstancePostDestroy(int32 InstanceIndex)
     // Base implementation does nothing
     // Subclasses override for custom post-destroy logic
 }
+
+
+
+#pragma region FEEDBACKS
+
+FISMFeedbackTags UISMRuntimeComponent::GetEffectiveFeedbackTags() const
+{
+    if (!InstanceData) return DefaultFeedbackTags;
+    return DefaultFeedbackTags.MergeWith(InstanceData->FeedbackTags);
+}
+
+bool UISMRuntimeComponent::TriggerInstanceFeedback(int32 InstanceIndex, FGameplayTag FeedbackTag, float Intensity)
+{
+    if (FeedbackTag.IsValid())
+    {
+        return false;
+    }
+    if (!IsValidInstanceIndex(InstanceIndex))
+    {
+        return false;
+    }
+    return TriggerFeedbackInternal(InstanceIndex, FeedbackTag, Intensity);
+}
+
+bool UISMRuntimeComponent::TriggerFeedbackInternal(int32 InstanceIndex, FGameplayTag FeedbackTag, float Intensity)
+{
+    if (UISMFeedbackSubsystem* FeedbackSubsystem = GetFeedbackSubsystem())
+    {
+        FISMFeedbackContext Context = FISMFeedbackContext::CreateFromInstance(FeedbackTag, this, InstanceIndex);
+        Context.Intensity = Intensity;
+        return FeedbackSubsystem->RequestFeedback(Context);
+    }
+    return false;
+}
+
+UISMFeedbackSubsystem* UISMRuntimeComponent::GetFeedbackSubsystem() const
+{
+    if (CachedFeedbackSubsystem.IsValid()) {
+        return CachedFeedbackSubsystem.Get();
+    }
+    if (UWorld* World = GetWorld())
+    {
+        if (UISMFeedbackSubsystem* Subsystem = World->GetSubsystem<UISMFeedbackSubsystem>())
+        {
+            CachedFeedbackSubsystem = Subsystem;
+            return Subsystem;
+        }
+    }
+    return nullptr;
+}
+
+
+
+void UISMRuntimeComponent::TriggerFeedbackOnDestroyInternal(int InstanceIndex, const UActorComponent* Instigator)
+{
+    TriggerFeedbackInternal([&](const FISMFeedbackTags& Tags) { return Tags.OnDestroy; }, InstanceIndex, Instigator);
+}
+
+void UISMRuntimeComponent::TriggerFeedbackOnSpawnInternal(int InstanceIndex, const UActorComponent* Instigator)
+{
+    TriggerFeedbackInternal([&](const FISMFeedbackTags& Tags) { return Tags.OnSpawn; }, InstanceIndex, Instigator);
+}
+
+void UISMRuntimeComponent::TriggerFeedbackOnHideInternal(int InstanceIndex, const UActorComponent* Instigator)
+{
+    TriggerFeedbackInternal([&](const FISMFeedbackTags& Tags) { return Tags.OnHide; }, InstanceIndex, Instigator);
+}
+
+void UISMRuntimeComponent::TriggerFeedbackOnShowInternal(int InstanceIndex, const UActorComponent* Instigator)
+{
+    TriggerFeedbackInternal([&](const FISMFeedbackTags& Tags) { return Tags.OnShow; }, InstanceIndex, Instigator);
+}
+
+void UISMRuntimeComponent::TriggerFeedbackOnTransformUpdateInternal(int InstanceIndex, const UActorComponent* Instigator)
+{
+    TriggerFeedbackInternal([&](const FISMFeedbackTags& Tags) { return Tags.OnTransformUpdate; }, InstanceIndex, Instigator);
+}
+
+void UISMRuntimeComponent::TriggerFeedbackBatchedOnDestroyInternal(TArray<int> InstanceIndexes, const UActorComponent* Instigator)
+{
+    TriggerFeedbackBatchedInternal([&](const FISMFeedbackTags& Tags) { return Tags.GetBatchDestroyTag(); }, InstanceIndexes, Instigator);
+}
+
+void UISMRuntimeComponent::TriggerFeedbackBatchedOnSpawnInternal(TArray<int> InstanceIndexes, const UActorComponent* Instigator)
+{
+    TriggerFeedbackBatchedInternal([&](const FISMFeedbackTags& Tags) { return Tags.GetBatchSpawnTag(); }, InstanceIndexes, Instigator);
+}
+
+
+
+
+void UISMRuntimeComponent::TriggerFeedbackInternal(TFunctionRef<FGameplayTag(const FISMFeedbackTags&)> SelectTag, int InstanceIndex, const UActorComponent* Instigator)
+{
+    UISMFeedbackSubsystem* Subsystem = GetFeedbackSubsystem();
+    if (!Subsystem) {
+        return;
+    }
+    FISMFeedbackTags EffectiveTags = GetEffectiveFeedbackTags();
+    FGameplayTag TargetTag = SelectTag(EffectiveTags);
+    if (!TargetTag.IsValid()) {
+        return;
+    }
+    FISMFeedbackParticipant InstigatorParticipant = FISMFeedbackParticipant::FromActorComponent(Instigator ? Instigator : this);
+    Subsystem->RequestFeedback(FISMFeedbackContext::CreateFromInstance(TargetTag, this, InstanceIndex).WithInstigator(InstigatorParticipant));
+}
+
+void UISMRuntimeComponent::TriggerFeedbackBatchedInternal(TFunctionRef<FGameplayTag(const FISMFeedbackTags&)> SelectTag, TArray<int> InstanceIndexes, const UActorComponent* Instigator)
+{
+    if (InstanceIndexes.Num() == 0) {
+        return;
+    }
+    UISMFeedbackSubsystem* Subsystem = GetFeedbackSubsystem();
+    if (!Subsystem) {
+        return;
+    }
+
+    FISMFeedbackTags EffectiveTags = GetEffectiveFeedbackTags();
+    FGameplayTag TargetTag = SelectTag(EffectiveTags);
+    if (!TargetTag.IsValid()) {
+        return;
+    }
+
+    Subsystem->RequestFeedback(FISMFeedbackContext::CreateFromInstanceBatched(TargetTag, this, InstanceIndexes).WithInstigator(FISMFeedbackParticipant::FromActorComponent(Instigator ? Instigator : this)));
+
+}
+
+#pragma endregion

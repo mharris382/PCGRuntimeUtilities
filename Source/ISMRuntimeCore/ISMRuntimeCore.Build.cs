@@ -28,7 +28,8 @@ public class ISMRuntimeCore : ModuleRules
 				"Core",
 				"CoreUObject",
 				"Engine",
-				"GameplayTags"
+                "PhysicsCore",
+                "GameplayTags"
 			}
 			);
 			
@@ -38,6 +39,7 @@ public class ISMRuntimeCore : ModuleRules
 			{
 				"Slate",
 				"SlateCore",
+				
 				"Projects"
 				// ... add private dependencies that you statically link with here ...	
 			}

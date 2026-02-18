@@ -51,6 +51,11 @@
       "LoadingPhase": "Default"
     },
     {
+      "Name": "ISMRuntimeFeedbacks",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    },
+    {
       "Name": "ISMRuntimeSpatial",
       "Type": "Runtime",
       "LoadingPhase": "Default"
@@ -63,6 +68,11 @@
     {
         "Name": "ISMRuntimeCoreTests",
         "Type": "UncookedOnly",
+        "LoadingPhase": "Default"
+    },
+    {
+        "Name": "ISMRuntimeDestruction",
+        "Type": "Runtime",
         "LoadingPhase": "Default"
     }
   ],

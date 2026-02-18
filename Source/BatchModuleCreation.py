@@ -12,7 +12,7 @@ COPY_FROM_PATH = r"PCGRuntimeUtilities\Source\ISMRuntimeCore"  # unused for now
 TARGET_ABSOLUTE_PATH_UPLUGIN_FILE = r"B:\UnrealEngine5_Projects\_repos5\ProceduralPlugins\Plugins\PCGRuntimeUtilities\PCGRuntimeUtils.uplugin"
 TARGET_ABSOLUTE_PATH_SOURCE = r"B:\UnrealEngine5_Projects\_repos5\ProceduralPlugins\Plugins\PCGRuntimeUtilities\Source"
 
-DEFAULT_PUBLIC_DEPENDENCIES = ["Core", "CoreUObject", "Engine", "ISMRuntimeCore"]
+DEFAULT_PUBLIC_DEPENDENCIES = ["Core", "CoreUObject", "Engine", "ISMRuntimeCore", "GameplayTags"]
 DEFAULT_PRIVATE_DEPENDENCIES: List[str] = []
 
 # format: ModuleName : [IsRuntimeModule, Description, PublicDependencies, PrivateDependencies]
@@ -20,13 +20,15 @@ OUTPUT_MODULE_DEFINITIONS: Dict[str, List] = {
     "ISMRuntimePools":        [True,  "", [], []],
     "ISMRuntimeSpatial":      [True,  "", [], []],
     "ISMRuntimeResource":     [True,  "", [], []],
-    "ISMRuntimePhysics":      [True,  "", ["ISMRuntimePools", "PhysicsCore"], []],
+    "ISMRuntimePhysics":      [True,  "", ["ISMRuntimePools", "PhysicsCore", "ISMRuntimeFeedbacks"], []],
     "ISMRuntimeInteraction":  [True,  "", ["ISMRuntimeSpatial"], ["UMG", "Slate", "SlateCore"]],
-    "ISMRuntimeDebug":        [False, "", [], ["ISMRuntimePools", "ISMRuntimeSpatial", "ISMRuntimeResource", "ISMRuntimePhysics", "ISMRuntimeInteraction", "ISMRuntimeDamage"]],
+    "ISMRuntimeDebug":        [False, "", [], ["ISMRuntimePools", "ISMRuntimeSpatial", "ISMRuntimeResource", "ISMRuntimePhysics", "ISMRuntimeInteraction", "ISMRuntimeDamage", "ISMRuntimeFeedbacks"]],
     # NOTE: you had a missing comma between "ISMRuntimeInteraction" and "ISMRuntimeDamage" in your uploaded file.
     "ISMRuntimeEditor":       [False, "", ["UnrealEd", "ISMRuntimePools", "ISMRuntimeSpatial", "ISMRuntimeResource", "ISMRuntimePhysics", "ISMRuntimeInteraction", "ISMRuntimeDamage"], ["UMG", "Slate", "SlateCore"]],
-    "ISMRuntimeDamage":       [True,  "", [], ["Niagara"]],
+    "ISMRuntimeDamage":       [True,  "", ["ISMRuntimeFeedbacks"], []],
     "ISMRuntimeCoreTests":        [True,  "", [], []],
+    "ISMRuntimeFeedbacks":       [True,  "", [], ["Niagara"]],
+    "ISMRuntimeDestruction":       [True,  "", ["ISMRuntimePools", "GeometryCollectionEngine"], []],
 }
 
 # -------------------------
@@ -170,6 +172,7 @@ def upsert_uplugin_modules(uplugin: dict, module_entries: List[dict]) -> None:
     uplugin["Modules"] = existing
 
 def write_module_files(source_root: Path, module_name: str, public_deps: List[str], private_deps: List[str]) -> None:
+    print(f"Writing Module: {source_root}, ModuleName: {module_name}")
     module_root = source_root / module_name
     public_dir = module_root / "Public"
     private_dir = module_root / "Private"

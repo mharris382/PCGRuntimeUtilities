@@ -137,9 +137,15 @@ public:
     /** Get the effective local bounds (with padding applied) */
     FBox GetEffectiveLocalBounds() const;
 
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debugging")
+	FLinearColor DebugColor = FLinearColor::White;
+
     #if WITH_EDITOR
-    /** Refresh cached bounds from the current StaticMesh. Called automatically when mesh changes. */
+
+	UFUNCTION(BlueprintCallable, Category = "ISM Data", CallInEditor)
     void RefreshCachedBounds();
+    /** Refresh cached bounds from the current StaticMesh. Called automatically when mesh changes. */
     
     virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 

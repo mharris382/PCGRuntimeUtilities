@@ -16,13 +16,16 @@ public class ISMRuntimeFeedbacks : ModuleRules
                 "Engine",
                 "ISMRuntimeCore",
                 "GameplayTags",
+                "PhysicsCore",
+                "Niagara",
+                "DeveloperSettings"
             }
         );
 
         PrivateDependencyModuleNames.AddRange(
             new string[]
             {
-                "Niagara",
+                
             }
         );
     }

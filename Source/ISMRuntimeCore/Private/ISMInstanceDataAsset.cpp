@@ -3,6 +3,7 @@
 
 #include "ISMInstanceDataAsset.h"
 #include "Engine/StaticMesh.h"
+#include "Logging/LogMacros.h"
 
 // ---------------------------------------------------------------
 //  GetEffectiveLocalBounds
@@ -49,9 +50,12 @@ FBox UISMInstanceDataAsset::GetEffectiveLocalBounds() const
 // ---------------------------------------------------------------
 #if WITH_EDITOR
 void UISMInstanceDataAsset::RefreshCachedBounds()
+
+
 {
     if (!StaticMesh)
     {
+		UE_LOG(LogTemp, Warning, TEXT("No static mesh assigned to %s. Cached bounds will be invalid."), *GetName());
         CachedLocalBounds = FBox(EForceInit::ForceInit); // mark invalid
         return;
     }
@@ -63,9 +67,16 @@ void UISMInstanceDataAsset::RefreshCachedBounds()
     if (MeshBox.IsValid)
     {
         CachedLocalBounds = MeshBox;
+        UE_LOG(LogTemp, Log, TEXT("Cached bounds for %s: Min=%s, Max=%s"),
+            *StaticMesh->GetName(),
+            *CachedLocalBounds.Min.ToString(),
+            *CachedLocalBounds.Max.ToString()
+		);
     }
     else
     {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to get valid bounding box for mesh %s. Using render bounds as fallback."),
+            *StaticMesh->GetName());
         // Fallback: build from the render data bounds (sphere-based)
         const FBoxSphereBounds& RenderBounds = StaticMesh->GetBounds();
         CachedLocalBounds = FBox(
@@ -91,9 +102,10 @@ void UISMInstanceDataAsset::PostEditChangeProperty(FPropertyChangedEvent& Proper
         GET_MEMBER_NAME_CHECKED(UISMInstanceDataAsset, bOverrideBounds),
         GET_MEMBER_NAME_CHECKED(UISMInstanceDataAsset, BoundsOverride),
     };
-
+	UE_LOG(LogTemp, Log, TEXT("Property changed: %s"), *PropertyName.ToString());
     if (BoundsDependentProperties.Contains(PropertyName))
     {
+		UE_LOG(LogTemp, Log, TEXT("Refreshing cached bounds due to change in %s"), *PropertyName.ToString());
         RefreshCachedBounds();
     }
 }

@@ -8,6 +8,7 @@
 #include "ISMInstanceHandle.h"
 #include "Delegates/DelegateCombinations.h"
 #include "Interfaces/ISMStateProvider.h"
+#include "GameplayTagAssetInterface.h"
 #include "ISMRuntimeComponent.generated.h"
 
 // Forward declarations
@@ -40,7 +41,10 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FOnInstanceDestroyedNative, class UISMRunti
  * All specialized ISM features (damage, resources, physics) inherit from this.
  */
 UCLASS(Blueprintable, ClassGroup=(ISMRuntime), meta=(BlueprintSpawnableComponent))
-class ISMRUNTIMECORE_API UISMRuntimeComponent : public UActorComponent, public IISMStateProvider
+class ISMRUNTIMECORE_API UISMRuntimeComponent 
+    : public UActorComponent
+    , public IISMStateProvider
+    , public IGameplayTagAssetInterface
 {
     GENERATED_BODY()
     
@@ -116,6 +120,33 @@ public:
     bool HasAnyTag(const FGameplayTagContainer& Tags) const { return ISMComponentTags.HasAny(Tags); }
 
 
+
+#pragma endregion
+
+#pragma region IGameplayTagAssetInterface
+
+public:
+    // ===== IGameplayTagAssetInterface =====
+
+    /**
+     * Get owned gameplay tags (component-level tags).
+     * Note: This returns component tags, not per-instance tags.
+     * Use GetInstanceTags(InstanceIndex) for per-instance tags.
+     */
+    virtual void GetOwnedGameplayTags(FGameplayTagContainer& TagContainer) const override
+    {
+        TagContainer.AppendTags(ISMComponentTags);
+    }
+
+    // Optional: Add helper to get tags for specific instance
+    void GetOwnedGameplayTagsForInstance(FGameplayTagContainer& TagContainer, int32 InstanceIndex) const
+    {
+        TagContainer.AppendTags(ISMComponentTags);
+        if (const FGameplayTagContainer* InstanceTags = PerInstanceTags.Find(InstanceIndex))
+        {
+            TagContainer.AppendTags(*InstanceTags);
+        }
+    }
 
 #pragma endregion
 

@@ -192,7 +192,7 @@ public:
      * Usage: ComponentTags.MergeWith(DataAssetTags);
      * Result: Data asset tags override component defaults where specified
      */
-    FISMFeedbackTags MergeWith(const FISMFeedbackTags& Other) const
+    FISMFeedbackTags OverrideWith(const FISMFeedbackTags& Other) const
     {
         FISMFeedbackTags Merged = *this;
         

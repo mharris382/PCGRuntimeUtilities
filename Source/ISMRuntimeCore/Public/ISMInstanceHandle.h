@@ -77,6 +77,8 @@ struct ISMRUNTIMECORE_API FISMInstanceHandle
     /** Get the current transform (from ISM or converted actor) */
     FTransform GetTransform() const;
 
+    struct FGameplayTagContainer GetInstanceTags() const;
+
     /**
      * Convert this instance to an actor.
      * @param ConversionContext - Context describing why/how to convert

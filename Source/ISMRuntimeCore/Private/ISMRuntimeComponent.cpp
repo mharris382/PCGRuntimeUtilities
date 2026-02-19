@@ -1469,7 +1469,7 @@ void UISMRuntimeComponent::OnInstancePostDestroy(int32 InstanceIndex)
 FISMFeedbackTags UISMRuntimeComponent::GetEffectiveFeedbackTags() const
 {
     if (!InstanceData) return DefaultFeedbackTags;
-    return DefaultFeedbackTags.MergeWith(InstanceData->FeedbackTags);
+    return DefaultFeedbackTags.OverrideWith(InstanceData->FeedbackTags);
 }
 
 bool UISMRuntimeComponent::TriggerInstanceFeedback(int32 InstanceIndex, FGameplayTag FeedbackTag, float Intensity)

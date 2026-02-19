@@ -5,9 +5,10 @@
 #include "GameFramework/Actor.h"
 #include "Components/BoxComponent.h"
 #include "ISMInstanceHandle.h"
+//#include "Feedbacks/ISMFeedbackTags.h"
 #include "ISMRuntimeComponent.h"
 #include "ISMRuntimeActor.generated.h"
-
+struct FISMFeedbackTags;
 /**
  * Mapping of static mesh to runtime component class.
  * This defines which component type to create for ISMs using a specific mesh.
@@ -30,10 +31,23 @@ struct FISMMeshComponentMapping
     float OverrideCellSize = 0.0f; // 0 = use default
 
 
+
 	//Required Data Asset.  Also provide an array for convienience when setting up in the editor.  Multiple data assets can spawn the same RuntimeComponentClass
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
     class TArray<UISMInstanceDataAsset*> InstanceDataAssets;
 
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime|Feedbacks", meta = (InlineEditConditionToggle))
+    bool bSetComponentDefaultFeedbackTags = true;
+
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime|Feedbacks", meta = (EditCondition = "bSetComponentDefaultFeedbackTags",
+        Tooltip = "If enabled, these FeedbackTags will be assigned by default to all ISM Runtime Component classes. (Note: any existing default tags defined the ISMRuntimeClass will take priority) "))
+    FISMFeedbackTags ComponentDefaultFeedbackTags;
+
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime|Tags", meta = (Tooltip = "These tags will be added to each ISMRuntimeComponent's ISMComponentTags spawned by this actor"))
+    FGameplayTagContainer DefaultComponentTags;
 };
 
 /**
@@ -63,6 +77,7 @@ public:
 
     // ===== Configuration =====
 
+
     /**
      * Mesh-to-component mappings.
      * Only ISMs with meshes listed here will get runtime components.
@@ -73,7 +88,20 @@ public:
 
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
-	TArray<AActor*> RuntimeComponentParents;
+    TArray<AActor*> RuntimeComponentParents;
+
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime", meta = (InlineEditConditionToggle))
+    bool bSetActorDefaultFeedbackTags = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime|Feedbacks", meta = (EditCondition = "bSetActorDefaultFeedbackTags", 
+        Tooltip="If enabled, these FeedbackTags will be assigned by default to all ISM Runtime Component classes. (Note: any existing default tags defined by either the Mapping or the ISMRuntimeClass will take priority) "))
+    struct FISMFeedbackTags ActorDefaultFeedbackTags;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime|Tags", meta=(Tooltip="These tags will be added to each ISMRuntimeComponent's ISMComponentTags spawned by this actor"))
+    FGameplayTagContainer DefaultTags;
+
+    FISMFeedbackTags DefaultFeedbackTagsFor(UISMRuntimeComponent* component, FISMMeshComponentMapping mapping);
 
     /**
      * Whether to automatically create runtime components on construction (editor) or BeginPlay (runtime).

@@ -111,6 +111,11 @@ struct ISMRUNTIMECORE_API FISMFeedbackParticipant
 
     /** Create participant from any actor component */
     static FISMFeedbackParticipant FromActorComponent(const UActorComponent* ActorComp);
+
+
+    void TryUpdateTags();
+    
+    
 };
 
 /**
@@ -431,12 +436,21 @@ struct ISMRUNTIMECORE_API FISMFeedbackContext
         return NewContext;
     }
 
+
+    FISMFeedbackContext WithSubject(FISMFeedbackParticipant NewSubject) const
+    {
+        FISMFeedbackContext NewContext = *this;
+        NewContext.Subject = NewSubject;
+        return NewContext;
+    }
+
     FISMFeedbackContext WithBatchedIndexes(TArray<int32> indexes) const
     {
         FISMFeedbackContext NewContext = *this;
 		NewContext.BatchedInstanceIndices = indexes;
         return NewContext;
     }
+
 
     // ===== Static Helper Constructors =====
 
@@ -472,5 +486,13 @@ struct ISMRUNTIMECORE_API FISMFeedbackContext
         FGameplayTag FeedbackTag,
         const UActorComponent* InstigatorComp,
         const struct FHitResult& HitResult);
+
+
+    static FISMFeedbackContext CreateFromPrimitive(
+        FGameplayTag FeedbackTag,
+        const UPrimitiveComponent* PrimComp, 
+		const UActorComponent* SubjectComp = nullptr,
+        EISMFeedbackMessageType messageType = EISMFeedbackMessageType::ONE_SHOT,
+        float Force = 0);
 
 };

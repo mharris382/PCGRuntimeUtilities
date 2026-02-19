@@ -1,5 +1,6 @@
 // ISMInstanceHandle.cpp
 #include "ISMInstanceHandle.h"
+#include "GameplayTagContainer.h"
 #include "ISMRuntimeComponent.h"
 #include "Interfaces/ISMConvertible.h"
 #include "GameFramework/Actor.h"
@@ -51,6 +52,23 @@ FTransform FISMInstanceHandle::GetTransform() const
     }
 
     return FTransform::Identity;
+}
+
+FGameplayTagContainer FISMInstanceHandle::GetInstanceTags() const
+{
+    // If converted, get transform from actor
+    //if (ConvertedActor.IsValid())
+    //{
+    //    return ConvertedActor->GetActorTransform();
+    //}
+    FGameplayTagContainer tags = FGameplayTagContainer();
+
+    // Otherwise get from ISM
+    if (UISMRuntimeComponent* Comp = Component.Get())
+    {
+		tags.AppendTags(Comp->GetInstanceTags(InstanceIndex));
+    }
+    return tags;
 }
 
 AActor* FISMInstanceHandle::ConvertToActor(const FISMConversionContext& ConversionContext)

@@ -1,7 +1,27 @@
 #include "ISMPhysicsDataAsset.h"
 #include "CoreMinimal.h"
+#include "ISMInstanceDataAsset.h"
+#include "Feedbacks/ISMFeedbackTags.h"
 #include "Logging/LogMacros.h"
 #include "ISMPoolDataAsset.h"
+
+#if WITH_EDITOR
+void UISMPhysicsDataAsset::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+	const FName PropertyName = PropertyChangedEvent.GetPropertyName();
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(UISMPhysicsDataAsset, bIsDestructable))
+	{
+		bEnablePhysicsCollision = bIsDestructable ? true : bEnablePhysicsCollision;
+	}
+	
+	if (!bEnablePhysicsCollision)
+	{
+		bIsDestructable = false;
+	}
+}
+#endif // WITH_EDITOR
+
 
 void UISMPhysicsDataAsset::GetRecommendedPoolSettings(int32& OutInitialSize, int32& OutGrowSize) const
 {

@@ -5,6 +5,31 @@
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "ISMPhysicsDataAsset.generated.h"
 
+
+
+UENUM(BlueprintType)
+enum class EISMPhysicsFeedbackMode : uint8
+{
+    /** Fire separate one-shot events on convert and return */
+    OneShot         UMETA(DisplayName = "One-Shot Events"),
+
+    /** Fire continuous lifecycle event (start, complete/cancel) */
+    Continuous      UMETA(DisplayName = "Continuous Lifecycle")
+};
+
+UENUM(BlueprintType)
+enum class EISMPhysicsLifecycleResult : uint8
+{
+    /** Both return and destroy are considered "complete" */
+    BothComplete    UMETA(DisplayName = "Both Complete"),
+
+    /** Return = complete, destroy = cancel */
+    ReturnComplete  UMETA(DisplayName = "Return Complete, Destroy Cancel"),
+
+    /** Destroy = complete, return = cancel */
+    DestroyComplete UMETA(DisplayName = "Destroy Complete, Return Cancel")
+};
+
 /**
  * Data asset defining physics behavior for ISM instances.
  * Extends UISMPoolDataAsset with physics-specific configuration.
@@ -80,6 +105,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Physics",
         meta=(Tooltip="Enable gravity simulation."))
     bool bEnableGravity = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Physics")
+	FWalkableSlopeOverride WalkableSlopeOverride;
     
     /**
      * Physics material defining friction and restitution (bounciness).
@@ -102,6 +130,9 @@ public:
         meta=(Tooltip="Collision preset name. Common: PhysicsActor, Destructible, Debris."))
     FName CollisionPreset = "PhysicsActor";
     
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Collision")
+    bool bCanEverEffectNavigation = false;
+
     /**
      * Enable collision between this and other physics actors.
      * Disable for better performance if actors don't need to collide with each other.
@@ -110,8 +141,32 @@ public:
         meta=(Tooltip="Allow collision with other physics actors. Disable for performance."))
     bool bEnablePhysicsCollision = true;
     
-    // ===== Conversion Thresholds =====
+    // ===== Destruction Thresholds =====
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Collision|Destruction", meta = (
+        EditCondition = "bEnablePhysicsCollision",
+        Tooltip= "Enable if this ISM can be destroyed by impacts.  NOTE: PhysicsActor must have Enable Physics Collision = true to be destructable"))
+    bool bIsDestructable = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Collision|Destruction",
+        meta = (
+            ClampMin = "0.0", UIMin = "0.0", UIMax = "50000.0",
+            EditCondition = "bEnablePhysicsCollision && bIsDestructable", EditConditionHides,
+            Tooltip = "Minimum impact force to convert to destroy instances/physics objects."))
+    float DestructionForceThreshold = 800.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Collision|Destruction",
+        meta = (EditCondition = "bEnablePhysicsCollision && bIsDestructable", EditConditionHides,
+                Tooltip = "Destuction Theshold is multiplied by the object scale (should be mass?), so larger instances are stronger."))
+	bool bDestructionThresholdIsScaled = true;
+
+    //UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Collision|Cascade", 
+    //    Tooltip = ("This enables ISMPhysicsActor to itself hit ISMRuntimeComponent instances"))
+    //bool bEnableISMCascading = false;
     
+
+    // ===== Conversion Thresholds =====
+
     /**
      * Minimum impact force required to trigger conversion from ISM to physics actor.
      * Lower values = more sensitive to impacts.
@@ -181,7 +236,6 @@ public:
 	bool bLogRestingChecks = false;
 
     
-    // ===== Visual/Audio Feedback =====
     
     /**
      * Scale applied to the actor when converted.
@@ -193,21 +247,66 @@ public:
               Tooltip="Scale multiplier when converting to actor. Usually 1.0."))
     float ActorScaleMultiplier = 1.0f;
     
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+    bool bPhysicsActorCastShadows = true;
+
+
+    // ===== Feedback Configuration =====
+
     /**
-     * Sound to play when instance converts to physics actor (impact sound).
-     * Leave null for silent conversion.
+     * How to fire feedback events from physics actor lifecycle.
      */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio",
-        meta=(Tooltip="Sound to play on conversion (impact). Null = silent."))
-    TObjectPtr<USoundBase> ConversionSound = nullptr;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback")
+    EISMPhysicsFeedbackMode FeedbackMode = EISMPhysicsFeedbackMode::OneShot;
     
+    bool IsContinous() const { return FeedbackMode == EISMPhysicsFeedbackMode::Continuous;}
+    // --- One-Shot Mode (separate convert/return events) ---
+
     /**
-     * Sound to play when actor returns to ISM (settle sound).
-     * Leave null for silent return.
+     * Feedback to play when instance converts to physics actor.
+     * Only used in One-Shot mode.
      */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio",
-        meta=(Tooltip="Sound to play when returning to ISM (settle). Null = silent."))
-    TObjectPtr<USoundBase> ReturnSound = nullptr;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback",
+        meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::OneShot", EditConditionHides))
+    FGameplayTag ConversionFeedback;
+
+    /**
+     * Feedback to play when physics actor returns to ISM.
+     * Only used in One-Shot mode.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback",
+        meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::OneShot", EditConditionHides))
+    FGameplayTag ReturnFeedback;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback",
+        meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::OneShot", EditConditionHides))
+    FGameplayTag DestroyFeedback;
+
+    // --- Continuous Mode (lifecycle event) ---
+
+    /**
+     * Feedback tag for continuous lifecycle event.
+     * Fired with lifecycle stage in custom params.
+     *
+     * Examples:
+     * - "Feedback.Physics.Lifecycle.Bottle" -> start loop on spawn, stop on despawn
+     * - "Feedback.Physics.Lifecycle.Bomb" -> start fuse, complete on explode, cancel on disarm
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback",
+        meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::Continuous", EditConditionHides))
+    FGameplayTag LifecycleFeedbackTag;
+
+    /**
+     * How to interpret the lifecycle result.
+     * Determines whether return/destroy are considered "complete" or "cancel".
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback",
+        meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::Continuous", EditConditionHides))
+    EISMPhysicsLifecycleResult LifecycleResult = EISMPhysicsLifecycleResult::BothComplete;
+
+
+    
+
     
     // ===== Advanced Settings =====
     
@@ -216,15 +315,15 @@ public:
      * Useful for objects that should only rotate in certain directions.
      * Example: Logs that roll but don't tumble.
      */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Advanced",
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Advanced", AdvancedDisplay,
         meta=(Tooltip="Lock rotation on specific axes."))
     bool bLockRotationX = false;
     
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Advanced",
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Advanced", AdvancedDisplay,
         meta=(Tooltip="Lock rotation on specific axes."))
     bool bLockRotationY = false;
     
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Advanced",
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Advanced", AdvancedDisplay,
         meta=(Tooltip="Lock rotation on specific axes."))
     bool bLockRotationZ = false;
     
@@ -233,7 +332,7 @@ public:
      * Prevents objects from spinning unrealistically fast.
      * Set to 0 for no limit.
      */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Advanced",
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Advanced", AdvancedDisplay,
         meta=(ClampMin="0.0", UIMin="0.0", UIMax="100.0",
               Tooltip="Max angular velocity (rad/s). 0 = no limit."))
     float MaxAngularVelocity = 0.0f;
@@ -243,7 +342,7 @@ public:
      * Used to simulate off-center weight distribution.
      * Leave at zero for automatic center of mass.
      */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Advanced",
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Advanced", AdvancedDisplay,
         meta=(Tooltip="Center of mass offset. Zero = automatic."))
     FVector CenterOfMassOffset = FVector::ZeroVector;
 
@@ -252,7 +351,7 @@ public:
      * Validate physics configuration.
      * Called in editor when properties change.
      */
-    //virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+    virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
 
     /**

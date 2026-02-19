@@ -4,8 +4,12 @@
 #include "Components/StaticMeshComponent.h"
 #include "Logging/LogMacros.h"
 #include "ISMRuntimeComponent.h"
+
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "Kismet/GameplayStatics.h"
+#include "Feedbacks/ISMFeedbackSubsystem.h"
+#include "Feedbacks/ISMFeedbackContext.h"
+
 #include "DrawDebugHelpers.h"
 
 AISMPhysicsActor::AISMPhysicsActor()
@@ -122,7 +126,7 @@ void AISMPhysicsActor::OnRequestedFromPool_Implementation(UISMPoolDataAsset* Dat
     TimeActivated = GetWorld()->GetTimeSeconds();
     
     // Play conversion sound
-    PlayConversionSound();
+    PlayConversionFeedback();
     
     UE_LOG(LogTemp, Log, TEXT("AISMPhysicsActor::OnRequestedFromPool - Actor configured and activated"));
 }
@@ -136,7 +140,7 @@ void AISMPhysicsActor::OnReturnedToPool_Implementation(FTransform& OutFinalTrans
     bUpdateInstanceTransform = true; // Usually want to update ISM position to match where actor settled
     
     // Play return sound
-    PlayReturnSound();
+    PlayReturnFeedback();
     
     // Stop physics
     if (MeshComponent)
@@ -267,6 +271,9 @@ void AISMPhysicsActor::ApplyCollisionSettings(UISMPhysicsDataAsset* PhysicsDataA
         // Disable collision with other physics objects
         MeshComponent->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
     }
+	MeshComponent->SetCanEverAffectNavigation(PhysicsDataAsset->bCanEverEffectNavigation);
+	MeshComponent->SetWalkableSlopeOverride(PhysicsDataAsset->WalkableSlopeOverride);
+	MeshComponent->SetNotifyRigidBodyCollision(PhysicsDataAsset->bIsDestructable);
     
     UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::ApplyCollisionSettings - Preset: %s, PhysicsCollision: %s"),
         *PhysicsDataAsset->CollisionPreset.ToString(), PhysicsDataAsset->bEnablePhysicsCollision ? TEXT("Enabled") : TEXT("Disabled"));
@@ -285,10 +292,14 @@ void AISMPhysicsActor::ApplyVisualSettings(UISMPhysicsDataAsset* PhysicsDataAsse
         const FVector CurrentScale = GetActorScale3D();
         SetActorScale3D(CurrentScale * PhysicsDataAsset->ActorScaleMultiplier);
     }
+
+	MeshComponent->SetCastShadow(PhysicsDataAsset->bPhysicsActorCastShadows);
     
     UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::ApplyVisualSettings - Scale: %.2f"),
         PhysicsDataAsset->ActorScaleMultiplier);
 }
+
+#pragma region RESTING_DETECTION
 
 // ===== Resting Detection =====
 
@@ -298,10 +309,10 @@ bool AISMPhysicsActor::IsAtRest() const
     {
         return false;
     }
-    
+
     const float LinearVelocity = GetLinearVelocityMagnitude();
     const float AngularVelocity = GetAngularVelocityMagnitude();
-    
+
     return IsVelocityBelowThreshold(LinearVelocity, AngularVelocity);
 }
 
@@ -311,11 +322,11 @@ bool AISMPhysicsActor::ShouldReturnToISM() const
     {
         return false;
     }
-    
+
     // Check if at rest for required duration
     const bool bAtRest = IsAtRest();
     const bool bLongEnough = TimeAtRest >= PhysicsData->RestingCheckDelay;
-    
+
     return bAtRest && bLongEnough;
 }
 
@@ -325,52 +336,235 @@ void AISMPhysicsActor::ReturnToISM()
     // 1. Automatically when actor settles (from Tick)
     // 2. Manually via reset triggers or limiters
     // 3. Via pool cleanup
-    
+
     // The actual return logic is handled by the pool subsystem
     // through the component that owns this actor's handle
-    
+
     if (!InstanceHandle.IsValid())
     {
         UE_LOG(LogTemp, Warning, TEXT("AISMPhysicsActor::ReturnToISM - Invalid instance handle!"));
         return;
     }
-    
+
     UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::ReturnToISM - Returning to ISM"));
-    
+
     // Call the handle's return function
     // This will trigger OnReturnedToPool and handle pool return
     InstanceHandle.ReturnToISM(true, true); // Destroy actor=true, UpdateTransform=true
 }
 
-// ===== Audio Feedback =====
+#pragma endregion
 
-void AISMPhysicsActor::PlayConversionSound()
+
+#pragma region FEEDBACKS
+namespace
 {
-    if (!PhysicsData.IsValid() || !PhysicsData->ConversionSound)
+    bool PlayFeedback(FGameplayTag tag, AISMPhysicsActor* actor, EISMFeedbackMessageType MessageType, TFunctionRef<void(FISMFeedbackContext& context)> SetupContext)
+    {
+        if (!tag.IsValid())
+            return false;
+        if (!actor)
+            return false;
+
+        UWorld* World = actor->GetWorld();
+        if (!World)
+            return false; // Changed from true to false - no world means can't play feedback
+
+        UISMFeedbackSubsystem* FeedbackSys = World->GetSubsystem<UISMFeedbackSubsystem>();
+        if (!FeedbackSys)
+            return false;
+
+        FISMFeedbackContext Context = FISMFeedbackContext::CreateFromPrimitive(tag, actor->MeshComponent, nullptr, MessageType, 0.0f);
+        SetupContext(Context);
+        return FeedbackSys->RequestFeedback(Context);
+    }
+
+    EISMFeedbackMessageType GetMessageTypeStart(UISMPhysicsDataAsset* PhysicsData)
+    {
+        if (!PhysicsData)
+            return EISMFeedbackMessageType::ONE_SHOT;
+
+        return PhysicsData->FeedbackMode == EISMPhysicsFeedbackMode::Continuous
+            ? EISMFeedbackMessageType::STARTED  // Should be STARTED, not COMPLETED!
+            : EISMFeedbackMessageType::ONE_SHOT;
+    }
+
+    EISMFeedbackMessageType GetMessageTypeEnding(UISMPhysicsDataAsset* PhysicsData, bool bIsForDestructionEvent)
+    {
+        if (!PhysicsData)
+            return EISMFeedbackMessageType::ONE_SHOT;
+
+        switch (PhysicsData->FeedbackMode)
+        {
+        case EISMPhysicsFeedbackMode::OneShot:
+            return EISMFeedbackMessageType::ONE_SHOT;
+
+        case EISMPhysicsFeedbackMode::Continuous:
+        {
+            // For continuous mode, determine complete vs interrupted
+            switch (PhysicsData->LifecycleResult)
+            {
+            case EISMPhysicsLifecycleResult::BothComplete:
+                return EISMFeedbackMessageType::COMPLETED;
+
+            case EISMPhysicsLifecycleResult::ReturnComplete:
+                // Return = complete, destroy = interrupted
+                return bIsForDestructionEvent
+                    ? EISMFeedbackMessageType::INTERRUPTED
+                    : EISMFeedbackMessageType::COMPLETED;
+
+            case EISMPhysicsLifecycleResult::DestroyComplete:
+                // Destroy = complete, return = interrupted
+                return bIsForDestructionEvent
+                    ? EISMFeedbackMessageType::COMPLETED
+                    : EISMFeedbackMessageType::INTERRUPTED;
+
+            default:
+                return EISMFeedbackMessageType::COMPLETED;
+            }
+        }
+
+        default:
+            return EISMFeedbackMessageType::ONE_SHOT;
+        }
+        // REMOVED: Unreachable return statement here
+    }
+}
+
+void AISMPhysicsActor::PlayConversionFeedback()
+{
+    if (!PhysicsData.IsValid())
+        return;
+
+    EISMFeedbackMessageType MessageType = GetMessageTypeStart(PhysicsData.Get());
+    FGameplayTag tag = PhysicsData->IsContinous()
+        ? PhysicsData->LifecycleFeedbackTag
+        : PhysicsData->ConversionFeedback;
+
+    PlayFeedback(tag, this, MessageType, [](FISMFeedbackContext& Context)
+        {
+            Context.Normal = FVector::UpVector; // Spawning upward, not down
+        });
+
+    UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::PlayConversionFeedback - Fired tag %s"), *tag.ToString());
+}
+
+void AISMPhysicsActor::PlayReturnFeedback()
+{
+    if (!PhysicsData.IsValid())
+        return;
+
+    EISMFeedbackMessageType MessageType = GetMessageTypeEnding(PhysicsData.Get(), false);
+    FGameplayTag tag = PhysicsData->IsContinous()
+        ? PhysicsData->LifecycleFeedbackTag
+        : PhysicsData->ReturnFeedback;
+
+    PlayFeedback(tag, this, MessageType, [this](FISMFeedbackContext& Context)
+        {
+            Context.Normal = FVector::DownVector;
+            Context.Velocity = MeshComponent ? MeshComponent->GetPhysicsLinearVelocity() : FVector::ZeroVector;
+            Context.Intensity = GetLinearVelocityMagnitude() / 1000.0f; // Normalize velocity
+        });
+
+    UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::PlayReturnFeedback - Fired tag %s"), *tag.ToString());
+}
+
+void AISMPhysicsActor::PlayDestructionFeedback()
+{
+    if (!PhysicsData.IsValid())
+        return;
+
+    EISMFeedbackMessageType MessageType = GetMessageTypeEnding(PhysicsData.Get(), true);
+    FGameplayTag tag = PhysicsData->IsContinous()
+        ? PhysicsData->LifecycleFeedbackTag
+        : PhysicsData->DestroyFeedback;
+
+    PlayFeedback(tag, this, MessageType, [this](FISMFeedbackContext& Context)
+        {
+            Context.Velocity = MeshComponent ? MeshComponent->GetPhysicsLinearVelocity() : FVector::ZeroVector;
+            Context.Intensity = 1.0f; // Max intensity for destruction
+        });
+
+    UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::PlayDestructionFeedback - Fired tag %s"), *tag.ToString());
+}
+#pragma endregion
+
+
+#pragma region DESTRUCTION
+
+
+void AISMPhysicsActor::OnPhysicsActorHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
+{
+    if (!PhysicsData.IsValid() || !InstanceHandle.IsValid())
     {
         return;
     }
-    
-    UGameplayStatics::PlaySoundAtLocation(
-        this,
-        PhysicsData->ConversionSound,
-        GetActorLocation()
-    );
+
+    // Calculate impact force magnitude
+    const float ImpactForce = NormalImpulse.Size();
+
+    // Check if this impact should trigger destruction
+    if (ShouldDestroyOnImpact(ImpactForce))
+    {
+        UE_LOG(LogTemp, Log, TEXT("AISMPhysicsActor::OnPhysicsHit - %s hit with force %.1f, triggering destruction"),
+            *GetName(), ImpactForce);
+
+        // Get the component that owns this instance
+        if (UISMRuntimeComponent* Component = InstanceHandle.Component.Get())
+        {
+            // Destroy the instance (this fires OnInstanceDestroyed -> feedback)
+            Component->DestroyInstance(InstanceHandle.InstanceIndex, false);
+
+            // Return this physics actor to pool immediately (no need to simulate further)
+            // Note: We DON'T call ReturnToISM because the instance is destroyed, not hidden
+            // The pool system will handle cleanup via the handle
+        }
+    }
 }
 
-void AISMPhysicsActor::PlayReturnSound()
+bool AISMPhysicsActor::ShouldDestroyOnImpact(float ImpactForce) const
 {
-    if (!PhysicsData.IsValid() || !PhysicsData->ReturnSound)
+    if (!PhysicsData.IsValid() || !PhysicsData->bIsDestructable)
     {
+        return false;
+    }
+
+    float DestructionThreshold = PhysicsData->DestructionForceThreshold;
+
+    // Scale threshold by actor scale if configured
+    if (PhysicsData->bDestructionThresholdIsScaled)
+    {
+        const float ActorScale = GetActorScale3D().GetMax(); // Use largest scale component
+        DestructionThreshold *= ActorScale;
+    }
+
+    return ImpactForce >= DestructionThreshold;
+}
+
+void AISMPhysicsActor::DestroyLinkedISMInstance()
+{
+    if (!InstanceHandle.IsValid())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AISMPhysicsActor::DestroyLinkedISMInstance - Invalid instance handle"));
         return;
     }
-    
-    UGameplayStatics::PlaySoundAtLocation(
-        this,
-        PhysicsData->ReturnSound,
-        GetActorLocation()
-    );
+
+    UISMRuntimeComponent* Component = InstanceHandle.Component.Get();
+    if (!Component)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("AISMPhysicsActor::DestroyLinkedISMInstance - Component no longer valid"));
+        return;
+    }
+
+    // Destroy the instance permanently (triggers OnInstanceDestroyed event)
+    Component->DestroyInstance(InstanceHandle.InstanceIndex, false);
+
+    UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::DestroyLinkedISMInstance - Destroyed instance %d in component %s"),
+        InstanceHandle.InstanceIndex, *Component->GetName());
 }
+
+#pragma endregion
+
 
 void AISMPhysicsActor::SetInstanceHandle(const FISMInstanceHandle& Handle)
 
@@ -380,6 +574,10 @@ void AISMPhysicsActor::SetInstanceHandle(const FISMInstanceHandle& Handle)
     UE_LOG(LogTemp, Log, TEXT("PhysicsActor %s set instance handle: Component=%s, Index=%d"), *GetName(), *Handle.Component.Get()->GetName(), Handle.InstanceIndex);
 }
 
+
+
+#pragma region ACCESSORS
+
 // ===== Accessors =====
 
 float AISMPhysicsActor::GetLinearVelocityMagnitude() const
@@ -388,7 +586,7 @@ float AISMPhysicsActor::GetLinearVelocityMagnitude() const
     {
         return 0.0f;
     }
-    
+
     return MeshComponent->GetPhysicsLinearVelocity().Size();
 }
 
@@ -398,9 +596,12 @@ float AISMPhysicsActor::GetAngularVelocityMagnitude() const
     {
         return 0.0f;
     }
-    
+
     return MeshComponent->GetPhysicsAngularVelocityInRadians().Size();
 }
+#pragma endregion
+
+#pragma region HELPER_FUNCTIONS
 
 // ===== Helper Functions =====
 
@@ -417,9 +618,9 @@ void AISMPhysicsActor::UpdateRestingDetection(float DeltaTime)
     {
         return;
     }
-    
+
     const bool bAtRest = IsAtRest();
-    
+
     if (bAtRest)
     {
         if (bWasAtRestLastFrame)
@@ -448,52 +649,56 @@ bool AISMPhysicsActor::IsVelocityBelowThreshold(float LinearVelocity, float Angu
     {
         return false;
     }
-    
+
     // Check linear velocity
     const bool bLinearBelowThreshold = LinearVelocity <= PhysicsData->RestingVelocityThreshold;
-    
+
     // Check angular velocity if required
     bool bAngularBelowThreshold = true;
     if (PhysicsData->bCheckAngularVelocity)
     {
         bAngularBelowThreshold = AngularVelocity <= PhysicsData->RestingAngularThreshold;
     }
-	PhysicsData->LogRestingCheck(GetOwner(), LinearVelocity, AngularVelocity, bLinearBelowThreshold && bAngularBelowThreshold);
+    PhysicsData->LogRestingCheck(GetOwner(), LinearVelocity, AngularVelocity, bLinearBelowThreshold && bAngularBelowThreshold);
     return bLinearBelowThreshold && bAngularBelowThreshold;
 }
+#pragma endregion
 
-// ===== Debug Visualization =====
+
 
 #if WITH_EDITOR
 
+#pragma region DEBUG_VISUALIZATION
+
+// ===== Debug Visualization =====
 void AISMPhysicsActor::DrawDebugInfo() const
 {
     if (!PhysicsData.IsValid())
     {
         return;
     }
-    
+
     const FVector Location = GetActorLocation();
     const UWorld* World = GetWorld();
     if (!World)
     {
         return;
     }
-    
+
     // Draw velocity vector
     const FVector LinearVelocity = MeshComponent ? MeshComponent->GetPhysicsLinearVelocity() : FVector::ZeroVector;
     const float VelocityMagnitude = LinearVelocity.Size();
-    
+
     if (VelocityMagnitude > 0.1f)
     {
         const FVector VelocityEnd = Location + LinearVelocity.GetSafeNormal() * 100.0f;
         DrawDebugDirectionalArrow(World, Location, VelocityEnd, 20.0f, FColor::Yellow, false, -1.0f, 0, 2.0f);
     }
-    
+
     // Draw rest state
     const FColor StateColor = IsAtRest() ? FColor::Green : FColor::Red;
     DrawDebugSphere(World, Location, 50.0f, 12, StateColor, false, -1.0f, 0, 2.0f);
-    
+
     // Draw debug text
     const FString DebugText = FString::Printf(
         TEXT("Vel: %.1f cm/s\nAngular: %.2f rad/s\nRest Time: %.2fs\nActive Time: %.1fs"),
@@ -502,12 +707,14 @@ void AISMPhysicsActor::DrawDebugInfo() const
         TimeAtRest,
         World->GetTimeSeconds() - TimeActivated
     );
-    
+
     DrawDebugString(World, Location + FVector(0, 0, 100), DebugText, nullptr, FColor::White, -1.0f, true);
-    
+
     // Draw threshold sphere
     const float ThresholdRadius = PhysicsData->RestingVelocityThreshold;
     DrawDebugSphere(World, Location, ThresholdRadius, 12, FColor::Cyan, false, -1.0f, 0, 1.0f);
 }
+#pragma endregion
+
 
 #endif // WITH_EDITOR

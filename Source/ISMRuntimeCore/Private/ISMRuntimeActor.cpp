@@ -1,10 +1,12 @@
 // ISMRuntimeActor.cpp
 
 #include "ISMRuntimeActor.h"
+#include "Feedbacks/ISMFeedbackTags.h"
 #include "ISMRuntimeComponent.h"
 #include "ISMInstanceDataAsset.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/BoxComponent.h"
+#include "GameFramework/Actor.h"
 
 AISMRuntimeActor::AISMRuntimeActor()
 {
@@ -19,6 +21,7 @@ AISMRuntimeActor::AISMRuntimeActor()
     bAutoUpdateBounds = true;
     BoundsPadding = 500.0f;
 }
+
 
 void AISMRuntimeActor::OnConstruction(const FTransform& Transform)
 {
@@ -53,6 +56,21 @@ void AISMRuntimeActor::EndPlay(const EEndPlayReason::Type EndReason)
     DestroyRuntimeComponents();
     Super::EndPlay(EndReason);
 }
+
+
+FISMFeedbackTags AISMRuntimeActor::DefaultFeedbackTagsFor(UISMRuntimeComponent* component, FISMMeshComponentMapping mapping)
+{
+    if (!component)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[ISMRuntimeActor] DefaultFeedbackTagsFor called with null component"));
+        return FISMFeedbackTags();
+    }
+    auto tags = bSetActorDefaultFeedbackTags ? ActorDefaultFeedbackTags : FISMFeedbackTags();
+    tags = mapping.bSetComponentDefaultFeedbackTags ? tags.OverrideWith(mapping.ComponentDefaultFeedbackTags) : tags;
+    return component->DefaultFeedbackTags = tags.OverrideWith(component->DefaultFeedbackTags);
+
+}
+
 
 #if WITH_EDITOR
 void AISMRuntimeActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
@@ -334,6 +352,16 @@ UISMRuntimeComponent* AISMRuntimeActor::CreateRuntimeComponentForISM(
 
     // Configure the component
     RuntimeComp->ManagedISMComponent = ISMComponent;
+
+
+    // Assign Feedbacks from Actor
+	FISMFeedbackTags t = DefaultFeedbackTagsFor(RuntimeComp, *MeshMapping);
+	RuntimeComp->DefaultFeedbackTags = t;
+
+    //compine Gameplay Tags defaults
+    auto tags = RuntimeComp->ISMComponentTags;
+	tags.AppendTags(DefaultTags);
+	tags.AppendTags(MeshMapping->DefaultComponentTags);
 
     // Apply mesh mapping settings
     if (MeshMapping)

@@ -5,6 +5,8 @@
 #include "Logging/LogMacros.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "GameplayTagAssetInterface.h"  
+
 #include "Components/SceneComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
@@ -71,7 +73,9 @@ FISMFeedbackParticipant FISMFeedbackParticipant::FromISMComponent(const UISMRunt
     // Get physical material from managed ISM component
     if (ISMComp->ManagedISMComponent)
         Participant.ParticipantPhysicalMaterial = GetPhysicalMaterialFromPrimitive(ISMComp->ManagedISMComponent);
-    
+
+    Participant.TryUpdateTags();
+
     return Participant;
 }
 
@@ -108,9 +112,45 @@ FISMFeedbackParticipant FISMFeedbackParticipant::FromActorComponent(const UActor
     
     // Note: ActorComponent doesn't have native tag support
     // Subclasses can populate ParticipantTags manually if needed
-    
+	Participant.TryUpdateTags();
     return Participant;
 }
+
+void FISMFeedbackParticipant::TryUpdateTags()
+{
+    // Reset before trying to get tags again
+    ParticipantTags.Reset();
+
+    // Try to get tags from component first
+    if (UActorComponent* Comp = ParticipantComponent.Get())
+    {
+        if (Comp->Implements<UGameplayTagAssetInterface>())
+        {
+            // Cast directly to interface - this works for non-UFUNCTION interface methods
+            if (IGameplayTagAssetInterface* TagInterface = Cast<IGameplayTagAssetInterface>(Comp))
+            {
+                FGameplayTagContainer ComponentTags;
+                TagInterface->GetOwnedGameplayTags(ComponentTags);
+                ParticipantTags.AppendTags(ComponentTags);
+            }
+        }
+    }
+
+    // Then try to get tags from actor
+    if (AActor* Actor = Participant.Get())
+    {
+        if (Actor->Implements<UGameplayTagAssetInterface>())
+        {
+            // Cast directly to interface
+            if (IGameplayTagAssetInterface* TagInterface = Cast<IGameplayTagAssetInterface>(Actor))
+            {
+                FGameplayTagContainer ActorTags;
+                TagInterface->GetOwnedGameplayTags(ActorTags);
+                ParticipantTags.AppendTags(ActorTags);
+            }
+        }
+    }
+ }
 
 // ===== FISMFeedbackContext Static Constructors =====
 
@@ -259,7 +299,11 @@ FISMFeedbackContext FISMFeedbackContext::CreateFromHitResult(
     const FHitResult& HitResult)
 {
     FISMFeedbackContext Context;
-    
+	if (FeedbackTag.IsValid() == false)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("CreateFromHitResult: FeedbackTag is invalid"));
+        return Context;
+    }
     // Set primary identification
     Context.FeedbackTag = FeedbackTag;
     
@@ -312,6 +356,38 @@ FISMFeedbackContext FISMFeedbackContext::CreateFromHitResult(
         Context.Intensity = FMath::Clamp(Context.Velocity.Size() / MaxExpectedVelocity, 0.0f, 1.0f);
     }
     
+    return Context;
+}
+
+FISMFeedbackContext FISMFeedbackContext::CreateFromPrimitive(FGameplayTag FeedbackTag, 
+    const UPrimitiveComponent* InstigatorComp
+	, const UActorComponent* SubjectComp
+    , EISMFeedbackMessageType messageType, float Force)
+{
+    FISMFeedbackContext Context;
+    if (FeedbackTag.IsValid() == false)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("CreateFromHitResult: FeedbackTag is invalid"));
+        return Context;
+    }
+
+    // Set primary identification
+    Context.FeedbackTag = FeedbackTag;
+
+    // Calculate velocity if we have impact normal and a moving instigator
+    if (InstigatorComp)
+    {
+		Context.Velocity = InstigatorComp->GetComponentVelocity();
+		Context.Instigator = FISMFeedbackParticipant::FromActorComponent(InstigatorComp);
+        //Context.Velocity = SceneComp->GetComponentVelocity();
+    }
+	Context.Force = Force;
+    if(SubjectComp)
+    {
+        Context.Subject = FISMFeedbackParticipant::FromActorComponent(SubjectComp);
+	}
+    Context.ContextTags = Context.Instigator.ParticipantTags;
+	Context.FeedbackMessageType = messageType;
     return Context;
 }
 

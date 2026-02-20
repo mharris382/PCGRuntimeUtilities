@@ -3,7 +3,36 @@
 
 #include "ISMInstanceDataAsset.h"
 #include "Engine/StaticMesh.h"
+#include "CustomData/ISMCustomDataSchema.h"
 #include "Logging/LogMacros.h"
+
+const FISMCustomDataSchema* UISMInstanceDataAsset::ResolveSchema() const
+{
+    const UISMRuntimeDeveloperSettings* Settings = UISMRuntimeDeveloperSettings::Get();
+    if (!bUsePICDConversion || !Settings)
+        return nullptr;
+	
+    if (GetEffectiveSchemaName() == NAME_None)
+        return Settings->GetDefaultSchema();
+
+    auto schema = Settings->ResolveSchema(GetEffectiveSchemaName());
+    return schema ? schema : Settings->GetDefaultSchema();
+}
+
+FName UISMInstanceDataAsset::GetEffectiveSchemaName() const { return SchemaName; }
+
+#if WITH_EDITOR
+
+TArray<FName> UISMInstanceDataAsset::GetAvailableSchemaNames() const
+{
+    const UISMRuntimeDeveloperSettings* Settings = UISMRuntimeDeveloperSettings::Get();
+    if (!Settings)
+        return TArray<FName>();
+    return Settings->GetAllSchemaNames();
+}
+
+#endif // WITH_EDITOR
+
 
 // ---------------------------------------------------------------
 //  GetEffectiveLocalBounds

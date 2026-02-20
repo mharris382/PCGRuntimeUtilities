@@ -29,8 +29,10 @@ public class ISMRuntimeCore : ModuleRules
 				"CoreUObject",
 				"Engine",
                 "PhysicsCore",
-                "GameplayTags"
-			}
+                "GameplayTags",
+				"DeveloperSettings",
+                "MaterialShaderQualitySettings"
+            }
 			);
 			
 		

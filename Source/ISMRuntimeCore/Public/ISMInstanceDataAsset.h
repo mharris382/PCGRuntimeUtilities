@@ -78,40 +78,116 @@ public:
     
     // ===== Custom Data =====
     
-    /** Custom float parameters for module-specific use */
+#pragma region CUSTOM_DATA
+                    /** Custom float parameters for module-specific use */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Custom")
     TMap<FName, float> CustomFloatParameters;
-    
+
     /** Custom int parameters for module-specific use */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Custom")
     TMap<FName, int32> CustomIntParameters;
-    
+
     /** Custom string parameters for module-specific use */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Custom")
     TMap<FName, FString> CustomStringParameters;
-    
+
     // ===== Helper Functions =====
-    
+
     UFUNCTION(BlueprintCallable, Category = "ISM Data")
     float GetFloatParameter(FName ParameterName, float DefaultValue = 0.0f) const
     {
         const float* Value = CustomFloatParameters.Find(ParameterName);
         return Value ? *Value : DefaultValue;
     }
-    
+
     UFUNCTION(BlueprintCallable, Category = "ISM Data")
     int32 GetIntParameter(FName ParameterName, int32 DefaultValue = 0) const
     {
         const int32* Value = CustomIntParameters.Find(ParameterName);
         return Value ? *Value : DefaultValue;
     }
-    
+
     UFUNCTION(BlueprintCallable, Category = "ISM Data")
     FString GetStringParameter(FName ParameterName, const FString& DefaultValue = "") const
     {
         const FString* Value = CustomStringParameters.Find(ParameterName);
         return Value ? *Value : DefaultValue;
     }
+#pragma endregion
+
+
+
+
+    // ===== PICD Conversion =====
+
+#pragma region PICD_Conversion
+  
+    /**
+    * Whether this instance type should attempt PICD-to-DMI conversion
+    * when the instance is converted to a physics/gameplay actor.
+    *
+    * When true, the conversion system will:
+    *   1. Resolve SchemaName against the global registry in UISMRuntimeDeveloperSettings
+    *   2. Use the ISM's own material as the DMI template
+    *   3. Build a pool signature from the instance's PICD values
+    *   4. Get or create a pooled DMI and offer it to the converted actor
+    *      via IISMCustomDataMaterialProvider (actor makes the final decision)
+    *
+    * When false, converted actors receive the raw ISM material with no DMI wrapping.
+    * Default: true — opt-out rather than opt-in, since PICD conversion is the
+    * common case for any project using per-instance custom data.
+    */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual|PICD Conversion",
+        meta = (DisplayName = "Use PICD Conversion",
+            ToolTip = "When enabled, per-instance custom data is translated to DMI \n parameters when this instance converts to a physics actor. \n The ISM's material is used directly as the DMI template."))
+    bool bUsePICDConversion = true;
+
+    /**
+     * The PICD schema to use for DMI parameter mapping.
+     *
+     * Must match a key registered in UISMRuntimeDeveloperSettings::SchemaRegistry.
+     * Leave empty (NAME_None) to use the project default schema.
+     *
+     * The schema defines which PICD indices map to which material parameter names.
+     * Any material whose parameter names match the schema is automatically compatible —
+     * no per-material registration needed.
+     *
+     * Editor: displayed as a dropdown populated from the project schema registry.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual|PICD Conversion",
+        meta = (EditCondition = "bUsePICDConversion",
+            DisplayName = "Schema",
+            ToolTip = "The PICD channel mapping schema. Leave empty to use the \n project default schema defined in ISM Runtime project settings.",
+            GetOptions = "GetAvailableSchemaNames"))
+    FName SchemaName = NAME_None;
+
+    
+    /**
+ * Resolve the active schema for this asset.
+ * Returns the explicitly set schema if SchemaName is set,
+ * otherwise falls back to the project default.
+ * Returns nullptr if bUsePICDConversion is false or no schema is resolvable.
+ */
+    const struct FISMCustomDataSchema* ResolveSchema() const;
+
+    /**
+     * Get the effective schema name (explicit or default).
+     * Returns NAME_None if bUsePICDConversion is false or no default is configured.
+     */
+    FName GetEffectiveSchemaName() const;
+
+#if WITH_EDITOR
+    /**
+     * Called by the GetOptions meta specifier to populate the SchemaName dropdown.
+     * Returns all schema names registered in UISMRuntimeDeveloperSettings.
+     */
+    UFUNCTION()
+    TArray<FName> GetAvailableSchemaNames() const;
+#endif
+
+
+#pragma endregion
+
 
     // In UISMInstanceDataAsset
 
@@ -151,4 +227,8 @@ public:
 
    
     #endif
+
+
+
+
 };

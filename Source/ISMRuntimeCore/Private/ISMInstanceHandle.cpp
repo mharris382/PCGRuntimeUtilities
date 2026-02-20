@@ -1,9 +1,22 @@
 // ISMInstanceHandle.cpp
 #include "ISMInstanceHandle.h"
-#include "GameplayTagContainer.h"
+
 #include "ISMRuntimeComponent.h"
 #include "Interfaces/ISMConvertible.h"
+#include "GameplayTagContainer.h"
 #include "GameFramework/Actor.h"
+#include "Engine/World.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Kismet/GameplayStatics.h"
+
+#include "CustomData/ISMCustomDataSchema.h"
+#include "CustomData/ISMCustomDataSubsystem.h"
+#include "CustomData/ISMCustomDataMaterialProvider.h"
+#include "CustomData/ISMCustomDataConversionSystem.h"
+
+// ============================================================
+//  State Queries
+// ============================================================
 
 bool FISMInstanceHandle::IsValid() const
 {
@@ -22,13 +35,11 @@ AActor* FISMInstanceHandle::GetConvertedActor() const
 
 FVector FISMInstanceHandle::GetLocation() const
 {
-    // If converted, get location from actor
     if (ConvertedActor.IsValid())
     {
         return ConvertedActor->GetActorLocation();
     }
 
-    // Otherwise get from ISM
     if (UISMRuntimeComponent* Comp = Component.Get())
     {
         return Comp->GetInstanceLocation(InstanceIndex);
@@ -39,13 +50,11 @@ FVector FISMInstanceHandle::GetLocation() const
 
 FTransform FISMInstanceHandle::GetTransform() const
 {
-    // If converted, get transform from actor
     if (ConvertedActor.IsValid())
     {
         return ConvertedActor->GetActorTransform();
     }
 
-    // Otherwise get from ISM
     if (UISMRuntimeComponent* Comp = Component.Get())
     {
         return Comp->GetInstanceTransform(InstanceIndex);
@@ -56,20 +65,19 @@ FTransform FISMInstanceHandle::GetTransform() const
 
 FGameplayTagContainer FISMInstanceHandle::GetInstanceTags() const
 {
-    // If converted, get transform from actor
-    //if (ConvertedActor.IsValid())
-    //{
-    //    return ConvertedActor->GetActorTransform();
-    //}
-    FGameplayTagContainer tags = FGameplayTagContainer();
+    FGameplayTagContainer Tags;
 
-    // Otherwise get from ISM
     if (UISMRuntimeComponent* Comp = Component.Get())
     {
-		tags.AppendTags(Comp->GetInstanceTags(InstanceIndex));
+        Tags.AppendTags(Comp->GetInstanceTags(InstanceIndex));
     }
-    return tags;
+
+    return Tags;
 }
+
+// ============================================================
+//  Conversion
+// ============================================================
 
 AActor* FISMInstanceHandle::ConvertToActor(const FISMConversionContext& ConversionContext)
 {
@@ -78,7 +86,7 @@ AActor* FISMInstanceHandle::ConvertToActor(const FISMConversionContext& Conversi
         return nullptr;
     }
 
-    // Already converted?
+    // Already converted — return existing actor
     if (ConvertedActor.IsValid())
     {
         return ConvertedActor.Get();
@@ -90,23 +98,30 @@ AActor* FISMInstanceHandle::ConvertToActor(const FISMConversionContext& Conversi
         return nullptr;
     }
 
-    // Check if component implements conversion interface
     IISMConvertible* Convertible = Cast<IISMConvertible>(Comp);
     if (!Convertible)
     {
         return nullptr;
     }
 
-    // Cache data before conversion
+    // Cache state before conversion so ReturnToISM can restore it
     CachedPreConversionTransform = Comp->GetInstanceTransform(InstanceIndex);
-    //TODO: CachedCustomData = Comp->GetInstanceCustomData(InstanceIndex);
+    CachedCustomData = Comp->GetInstanceCustomData(InstanceIndex);
 
-    // Perform conversion
+    // Perform the conversion via the component's implementation
     AActor* Actor = Convertible->ConvertInstance(InstanceIndex, ConversionContext);
 
     if (Actor)
     {
         SetConvertedActor(Actor);
+
+        // Resolve and apply pooled DMIs based on cached custom data
+        // UISMCustomDataConversionSystem handles schema resolution and pool lookup
+        UWorld* World = Comp->GetWorld();
+        if (World && CachedCustomData.Num() > 0)
+        {
+            UISMCustomDataConversionSystem::ResolveAndApply(*this, Actor, World);
+        }
     }
 
     return Actor;
@@ -122,7 +137,7 @@ bool FISMInstanceHandle::ReturnToISM(bool bDestroyActor, bool bUpdateTransform)
     AActor* Actor = ConvertedActor.Get();
     if (!Actor)
     {
-        return false; // Not converted
+        return false;
     }
 
     UISMRuntimeComponent* Comp = Component.Get();
@@ -131,44 +146,75 @@ bool FISMInstanceHandle::ReturnToISM(bool bDestroyActor, bool bUpdateTransform)
         return false;
     }
 
-    // Get final transform from actor
-    FTransform FinalTransform = Actor->GetActorTransform();
+    const FTransform FinalTransform = Actor->GetActorTransform();
 
-    // Call component's delegate to allow custom cleanup
+    // Allow component delegate to override destroy decision (e.g. for pooling)
     bool bShouldDestroyActor = bDestroyActor;
     Comp->OnReleaseConvertedActor.ExecuteIfBound(Actor, bShouldDestroyActor);
 
-    // Update ISM instance
+    // Update ISM transform to match final actor position
     if (bUpdateTransform)
     {
         Comp->UpdateInstanceTransform(InstanceIndex, FinalTransform);
     }
 
-    // Restore custom data if available
+    // Restore custom data to ISM PICD.
+    // CachedCustomData is always current because WriteCustomData/WriteCustomDataValue
+    // keep it in sync even while converted, so this restores the final state correctly.
     if (CachedCustomData.Num() > 0)
     {
-        //TODO:Comp->SetInstanceCustomData(InstanceIndex, CachedCustomData);
+        Comp->SetInstanceCustomData(InstanceIndex, CachedCustomData);
     }
 
-    // Show the instance (in case it was hidden during conversion)
+    // Release the DMI reference in the shared pool (decrements ref count)
+    UWorld* World = Comp->GetWorld();
+    if (World)
+    {
+        UGameInstance* GI = World->GetGameInstance();
+        if (UISMCustomDataSubsystem* Sub = GI ? GI->GetSubsystem<UISMCustomDataSubsystem>() : nullptr)
+        {
+            FName SchemaName;
+            if (const FISMCustomDataSchema* Schema = Sub->ResolveSchemaForInstance(*this, SchemaName))
+            {
+                // Release per slot
+                const int32 NumSlots = Comp->ManagedISMComponent
+                    ? Comp->ManagedISMComponent->GetNumMaterials()
+                    : 1;
+
+                for (int32 SlotIdx = 0; SlotIdx < NumSlots; ++SlotIdx)
+                {
+                    if (!Schema->AppliesToSlot(SlotIdx)) { continue; }
+
+                    UMaterialInterface* Template = Comp->ManagedISMComponent
+                        ? Comp->ManagedISMComponent->GetMaterial(SlotIdx)
+                        : nullptr;
+
+                    if (Template)
+                    {
+                        Sub->ReleaseDMI(Template, CachedCustomData, *Schema, SlotIdx);
+                    }
+                }
+            }
+        }
+    }
+
+    // Unhide the ISM instance
     Comp->ShowInstance(InstanceIndex);
 
-    // Remove conversion tag
+    // Clear conversion state tags
     Comp->RemoveInstanceTag(InstanceIndex,
-        FGameplayTag::RequestGameplayTag("ISM.State.Converting"));
+        FGameplayTag::RequestGameplayTag(FName("ISM.State.Converting")));
     Comp->RemoveInstanceTag(InstanceIndex,
-        FGameplayTag::RequestGameplayTag("ISM.State.Converted"));
+        FGameplayTag::RequestGameplayTag(FName("ISM.State.Converted")));
 
-    // Broadcast event
+    // Broadcast return event before destroying actor
     Comp->OnInstanceReturnedToISM.ExecuteIfBound(*this, FinalTransform);
 
-    // Clean up actor
     if (bShouldDestroyActor)
     {
         Actor->Destroy();
     }
 
-    // Clear reference
     ConvertedActor.Reset();
     CachedCustomData.Empty();
 
@@ -181,17 +227,9 @@ void FISMInstanceHandle::SetConvertedActor(AActor* Actor)
 
     if (UISMRuntimeComponent* Comp = Component.Get())
     {
-        // Add tag to indicate conversion
         Comp->AddInstanceTag(InstanceIndex,
-            FGameplayTag::RequestGameplayTag("ISM.State.Converted"));
+            FGameplayTag::RequestGameplayTag(FName("ISM.State.Converted")));
 
-       // //TODO: Optionally hide the ISM instance while converted
-       // if (Comp->InstanceData && !Comp->InstanceData->bUseInvisiblePhysicsProxy)
-       // {
-       //     Comp->HideInstance(InstanceIndex);
-       // }
-
-        // Broadcast event
         Comp->OnInstanceConvertedToActor.ExecuteIfBound(*this, Actor);
     }
 }
@@ -204,6 +242,111 @@ void FISMInstanceHandle::ClearConvertedActor()
     if (UISMRuntimeComponent* Comp = Component.Get())
     {
         Comp->RemoveInstanceTag(InstanceIndex,
-            FGameplayTag::RequestGameplayTag("ISM.State.Converted"));
+            FGameplayTag::RequestGameplayTag(FName("ISM.State.Converted")));
     }
+}
+
+// ============================================================
+//  Custom Data Write-Through
+// ============================================================
+
+void FISMInstanceHandle::WriteCustomData(const TArray<float>& NewData, UWorld* World)
+{
+    if (!IsValid())
+    {
+        return;
+    }
+
+    UISMRuntimeComponent* Comp = Component.Get();
+    if (!Comp)
+    {
+        return;
+    }
+
+    // 1. Update ISM PICD (source of truth, always written even if instance is hidden)
+    Comp->SetInstanceCustomData(InstanceIndex, NewData);
+
+    // 2. Keep CachedCustomData in sync
+    CachedCustomData = NewData;
+
+    // 3. If currently a converted actor, refresh its materials
+    if (ConvertedActor.IsValid() && World)
+    {
+        ApplyCustomDataMaterialsToActor(ConvertedActor.Get(), World);
+    }
+}
+
+void FISMInstanceHandle::WriteCustomDataValue(int32 DataIndex, float Value, UWorld* World)
+{
+    if (!IsValid())
+    {
+        return;
+    }
+
+    UISMRuntimeComponent* Comp = Component.Get();
+    if (!Comp)
+    {
+        return;
+    }
+
+    // Ensure CachedCustomData is large enough
+    if (DataIndex >= CachedCustomData.Num())
+    {
+        CachedCustomData.SetNumZeroed(DataIndex + 1);
+    }
+
+    // Early out if value didn't change — avoids pool lookup and material update
+    if (FMath::IsNearlyEqual(CachedCustomData[DataIndex], Value))
+    {
+        return;
+    }
+
+    // 1. Write to ISM PICD
+    Comp->SetInstanceCustomDataValue(InstanceIndex, DataIndex, Value);
+
+    // 2. Update cache
+    CachedCustomData[DataIndex] = Value;
+
+    // 3. If currently a converted actor, refresh materials
+    if (ConvertedActor.IsValid() && World)
+    {
+        ApplyCustomDataMaterialsToActor(ConvertedActor.Get(), World);
+    }
+}
+
+float FISMInstanceHandle::ReadCustomDataValue(int32 DataIndex) const
+{
+    if (CachedCustomData.IsValidIndex(DataIndex))
+    {
+        return CachedCustomData[DataIndex];
+    }
+
+    return 0.f;
+}
+
+bool FISMInstanceHandle::RefreshConvertedActorMaterials(UWorld* World)
+{
+    if (!ConvertedActor.IsValid() || !World)
+    {
+        return false;
+    }
+
+    ApplyCustomDataMaterialsToActor(ConvertedActor.Get(), World);
+    return true;
+}
+
+// ============================================================
+//  Internal
+// ============================================================
+
+void FISMInstanceHandle::ApplyCustomDataMaterialsToActor(AActor* Actor, UWorld* World) const
+{
+    if (!Actor || !World || CachedCustomData.Num() == 0)
+    {
+        return;
+    }
+
+    // Delegate full resolution to the conversion system — it handles
+    // schema lookup, pool signature building, DMI creation, and application
+    UISMCustomDataConversionSystem::RefreshActorMaterials(*this, Actor, World);
 }

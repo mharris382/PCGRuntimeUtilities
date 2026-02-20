@@ -128,7 +128,13 @@ bool UISMRuntimeComponent::InitializeInstances()
     {
         FTransform InstanceTransform;
         ManagedISMComponent->GetInstanceTransform(i, InstanceTransform, true);
-
+        if (ManagedISMComponent->NumCustomDataFloats > 0)
+        {
+            TArray<float> CustomData;
+			CustomData.Reserve(ManagedISMComponent->NumCustomDataFloats);
+			
+			//InstanceCustomDataCache.Add(i, CustomData);
+        }
         InstanceLocations.Add(InstanceTransform.GetLocation());
 
         // Initialize state for this instance
@@ -325,7 +331,7 @@ void UISMRuntimeComponent::ShowInstance(int32 InstanceIndex, bool bUpdateBounds,
     // Restore scale (assume scale of 1,1,1 - could cache original scale if needed)
     FTransform VisibleTransform;
     ManagedISMComponent->GetInstanceTransform(InstanceIndex, VisibleTransform, true);
-    VisibleTransform.SetScale3D(FVector::OneVector);
+    VisibleTransform.SetScale3D(State->CachedTransform.GetScale3D());
     
     ManagedISMComponent->UpdateInstanceTransform(InstanceIndex, VisibleTransform, true, true);
     
@@ -974,10 +980,20 @@ void UISMRuntimeComponent::SetInstanceCustomData(int32 InstanceIndex, const TArr
     }
 
     ManagedISMComponent->MarkRenderStateDirty();
+
 }
 
 float UISMRuntimeComponent::GetInstanceCustomDataValue(int32 InstanceIndex, int32 DataIndex) const
 {
+	if (InstanceCustomDataCache.Contains(InstanceIndex))
+    {
+        const TArray<float>& CachedData = InstanceCustomDataCache[InstanceIndex];
+        if (CachedData.IsValidIndex(DataIndex))
+        {
+            return CachedData[DataIndex];
+        }
+    }
+
     if (!ManagedISMComponent || !IsValidInstanceIndex(InstanceIndex))
     {
         return 0.0f;
@@ -991,12 +1007,11 @@ float UISMRuntimeComponent::GetInstanceCustomDataValue(int32 InstanceIndex, int3
 
     int32 ArrayIndex = InstanceIndex * NumCustomDataFloats + DataIndex;
 
-    if (ManagedISMComponent->PerInstanceSMCustomData.IsValidIndex(ArrayIndex))
+    if (!ManagedISMComponent->PerInstanceSMCustomData.IsValidIndex(ArrayIndex))
     {
-        return ManagedISMComponent->PerInstanceSMCustomData[ArrayIndex];
+        return 0.0f;
     }
-
-    return 0.0f;
+    return ManagedISMComponent->PerInstanceSMCustomData[ArrayIndex];
 }
 
 void UISMRuntimeComponent::SetInstanceCustomDataValue(int32 InstanceIndex, int32 DataIndex, float Value)

@@ -589,7 +589,9 @@ protected:
 
 
     
-
+    private:
+        // In private storage:
+        TMap<int32, TArray<float>> InstanceCustomDataCache;
 
 
 

@@ -43,7 +43,6 @@ struct ISMRUNTIMECORE_API FISMInstanceState
     /** Whether cached transform is valid */
     bool bTransformCached = false;
 
-
     /** World-space AABB for this instance. Only valid when owning component has bComputeInstanceAABBs = true. */
     FBox WorldBounds;
 

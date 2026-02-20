@@ -62,13 +62,8 @@ struct ISMRUNTIMECORE_API FISMInstanceHandle
     UPROPERTY(BlueprintReadOnly, Category = "ISM Runtime")
     TWeakObjectPtr<AActor> ConvertedActor;
 
-    /**
-     * Canonical custom data for this instance.
-     * Always kept in sync with ISM PICD via WriteCustomData / WriteCustomDataValue.
-     * Read by the DMI pool and conversion system — this is the source of truth
-     * for converted actors since PICD on a hidden ISM instance can't be queried cheaply.
-     */
-    TArray<float> CachedCustomData;
+    
+    //TArray<float> CachedCustomData;
 
     /** Transform cached at conversion time, used to restore ISM position on return. */
     FTransform CachedPreConversionTransform;
@@ -154,11 +149,6 @@ struct ISMRUNTIMECORE_API FISMInstanceHandle
      */
     void WriteCustomDataValue(int32 DataIndex, float Value, UWorld* World);
 
-    /**
-     * Read-only access to the current canonical custom data.
-     * Reads from CachedCustomData — does not touch the ISM component.
-     */
-    const TArray<float>& ReadCustomData() const { return CachedCustomData; }
 
     /**
      * Read a single custom data channel value.
@@ -174,6 +164,8 @@ struct ISMRUNTIMECORE_API FISMInstanceHandle
      * @return          True if materials were successfully re-applied
      */
     bool RefreshConvertedActorMaterials(UWorld* World);
+
+    TArray<float> GetCustomDataFromISM() const;
 
     // ===== Operators =====
 

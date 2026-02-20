@@ -197,6 +197,7 @@ AActor* UISMPhysicsComponent::ConvertInstanceToPhysics(int32 InstanceIndex, FVec
         // Mark the handle as converted (this tracks conversion state)
         Handle.SetConvertedActor(PhysicsActor);
     }
+	Handle.RefreshConvertedActorMaterials(GetWorld());
     
     // Apply conversion impulse
     ApplyConversionImpulse(PhysicsActor, ImpactPoint, ImpactNormal, ImpactForce);
@@ -329,6 +330,7 @@ AISMPhysicsActor* UISMPhysicsComponent::SpawnPhysicsActorFromPool(const FISMInst
         UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::Spawned Actor was not of Type ISMPhysicsActor!"));
     }
 	ISMActor->SetInstanceHandle(InstanceHandle);
+	
     return ISMActor;
 }
 
@@ -554,11 +556,6 @@ void UISMPhysicsComponent::RegisterActorReturnCallback(AISMPhysicsActor* Physics
 
                         UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::OnInstanceReturnedToISM - Instance %d returned to ISM at %s with scale %s (Active: %d, Total Returns: %d)"),
                             InstanceIndex, *FinalTransform.GetLocation().ToString(), *FinalTransform.GetScale3D().ToString(), ActivePhysicsActors.Num(), TotalReturns);
-                    }
-                    else
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::OnInstanceReturnedToISM - Returned instance index %d does not match expected %d"),
-                            ReturnedHandle.InstanceIndex, InstanceIndex);
                     }
                 });
         }

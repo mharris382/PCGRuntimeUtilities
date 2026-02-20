@@ -31,21 +31,67 @@ AISMPhysicsActor::AISMPhysicsActor()
     SetFlags(RF_Transient);
 }
 
+//void AISMPhysicsActor::BeginPlay()
+//{
+//	ApplyIgnorePawnCollision(this);
+//}
+
+// ===== IISMCustomDataMaterialProvider Interface =====
+
+void AISMPhysicsActor::ApplyDMIToSlot_Implementation(int32 SlotIndex, UMaterialInstanceDynamic* DMI)
+{
+	UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::ApplyDMIToSlot - Slot: %d, DMI: %s"), SlotIndex, *GetNameSafe(DMI));
+    if (MeshComponent && SlotIndex < MeshComponent->GetNumMaterials())
+    {
+        MeshComponent->SetMaterial(SlotIndex, DMI);
+    }
+}
+
+int32 AISMPhysicsActor::GetMaterialSlotCount_Implementation() const
+{
+    return MeshComponent ? MeshComponent->GetNumMaterials() : 1;
+}
+
+bool AISMPhysicsActor::ShouldSkipSlot_Implementation(int32 SlotIndex) const
+{
+    return false; // Accept all slots
+}
+
 void AISMPhysicsActor::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
     
     if (!PhysicsData.IsValid())
     {
+		UE_LOG(LogTemp, Warning, TEXT("[%s] Tick - No valid physics data!"), *GetName());
         return;
     }
     
+    // DIAGNOSTIC LOGGING - Remove after debugging
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
     // Update resting detection
     UpdateRestingDetection(DeltaTime);
     
     // Auto-return if settled
     if (ShouldReturnToISM())
     {
+        UE_LOG(LogTemp, Log, TEXT("[%s] RETURNING TO ISM - Settled for %.2fs"),
+            *GetName(), TimeAtRest);
         ReturnToISM();
     }
     
@@ -120,6 +166,11 @@ void AISMPhysicsActor::OnRequestedFromPool_Implementation(UISMPoolDataAsset* Dat
     {
         MeshComponent->SetVisibility(true);
         MeshComponent->SetSimulatePhysics(true);
+    }
+
+    if (InstanceHandle.IsValid())
+    {
+        InstanceHandle.RefreshConvertedActorMaterials(GetWorld());
     }
     
     // Record activation time
@@ -504,22 +555,22 @@ void AISMPhysicsActor::OnPhysicsActorHit(UPrimitiveComponent* HitComponent, AAct
     const float ImpactForce = NormalImpulse.Size();
 
     // Check if this impact should trigger destruction
-    if (ShouldDestroyOnImpact(ImpactForce))
-    {
-        UE_LOG(LogTemp, Log, TEXT("AISMPhysicsActor::OnPhysicsHit - %s hit with force %.1f, triggering destruction"),
-            *GetName(), ImpactForce);
-
-        // Get the component that owns this instance
-        if (UISMRuntimeComponent* Component = InstanceHandle.Component.Get())
-        {
-            // Destroy the instance (this fires OnInstanceDestroyed -> feedback)
-            Component->DestroyInstance(InstanceHandle.InstanceIndex, false);
-
-            // Return this physics actor to pool immediately (no need to simulate further)
-            // Note: We DON'T call ReturnToISM because the instance is destroyed, not hidden
-            // The pool system will handle cleanup via the handle
-        }
-    }
+   // if (PhysicsData->bIsDestructable && ShouldDestroyOnImpact(ImpactForce) && PhysicsData->TestDestructionQueryForInstance(InstanceHandle))
+   // {
+   //     UE_LOG(LogTemp, Log, TEXT("AISMPhysicsActor::OnPhysicsHit - %s hit with force %.1f, triggering destruction"),
+   //         *GetName(), ImpactForce);
+   //
+   //     // Get the component that owns this instance
+   //     if (UISMRuntimeComponent* Component = InstanceHandle.Component.Get())
+   //     {
+   //         // Destroy the instance (this fires OnInstanceDestroyed -> feedback)
+   //         Component->DestroyInstance(InstanceHandle.InstanceIndex, false);
+   //
+   //         // Return this physics actor to pool immediately (no need to simulate further)
+   //         // Note: We DON'T call ReturnToISM because the instance is destroyed, not hidden
+   //         // The pool system will handle cleanup via the handle
+   //     }
+   // }
 }
 
 bool AISMPhysicsActor::ShouldDestroyOnImpact(float ImpactForce) const
@@ -571,6 +622,7 @@ void AISMPhysicsActor::SetInstanceHandle(const FISMInstanceHandle& Handle)
 {
     InstanceHandle = Handle;
     InstanceHandle.SetConvertedActor(this);
+	InstanceHandle.RefreshConvertedActorMaterials(GetWorld());
     UE_LOG(LogTemp, Log, TEXT("PhysicsActor %s set instance handle: Component=%s, Index=%d"), *GetName(), *Handle.Component.Get()->GetName(), Handle.InstanceIndex);
 }
 

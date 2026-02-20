@@ -7,6 +7,7 @@
 //#include "Logging/LogMacros.h"
 #include "Interfaces/ISMPoolable.h"
 #include "GameplayTagAssetInterface.h"
+#include "CustomData/ISMCustomDataMaterialProvider.h"
 #include "ISMPhysicsActor.generated.h"
 
 // Forward declarations
@@ -46,6 +47,7 @@ class ISMRUNTIMEPHYSICS_API AISMPhysicsActor
     : public AActor
     , public IISMPoolable
     , public IGameplayTagAssetInterface
+    , public IISMCustomDataMaterialProvider
 {
     GENERATED_BODY()
 
@@ -68,6 +70,12 @@ public:
     // ===== Interfaces =====
 
 #pragma region INTERFACES
+
+    // ===== IISMCustomDataMaterialProvider Interface =====
+
+    virtual void ApplyDMIToSlot_Implementation(int32 SlotIndex, UMaterialInstanceDynamic* DMI) override;
+    virtual int32 GetMaterialSlotCount_Implementation() const override;
+    virtual bool ShouldSkipSlot_Implementation(int32 SlotIndex) const override;
 
     // ===== IISMPoolable Interface =====
 

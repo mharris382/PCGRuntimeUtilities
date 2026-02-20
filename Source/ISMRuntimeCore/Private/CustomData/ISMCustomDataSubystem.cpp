@@ -412,7 +412,7 @@ void UISMCustomDataSubsystem::SurrenderHotDMI(FISMHotDMIHandle& HotHandle, UWorl
                 {
                     UMaterialInstanceDynamic* SharedDMI = GetOrCreateDMI(
                         Template,
-                        Handle->CachedCustomData,
+                        Handle->GetCustomDataFromISM(),
                         *Schema,
                         HotHandle.MaterialSlotIndex);
 
@@ -545,6 +545,9 @@ UMaterialInstanceDynamic* UISMCustomDataSubsystem::CreateAndApplyDMI(
     UMaterialInstanceDynamic* DMI = UMaterialInstanceDynamic::Create(Template, this);
     if (!DMI)
     {
+        UE_LOG(LogTemp, Error,
+            TEXT("ISMCustomDataSubsystem: Failed to create DMI for template %s"),
+			Template ? *Template->GetName() : TEXT("null"));
         return nullptr;
     }
 

@@ -29,6 +29,8 @@ OUTPUT_MODULE_DEFINITIONS: Dict[str, List] = {
     "ISMRuntimeCoreTests":        [True,  "", [], []],
     "ISMRuntimeFeedbacks":       [True,  "", [], ["Niagara"]],
     "ISMRuntimeDestruction":       [True,  "", ["ISMRuntimePools", "GeometryCollectionEngine"], []],
+    "ISMRuntimeAnimation":       [True,  "", ["ISMRuntimePools"], []],
+    "ISMRuntimePCGInterop":       [True,  "", ["PCG"], []],
 }
 
 # -------------------------

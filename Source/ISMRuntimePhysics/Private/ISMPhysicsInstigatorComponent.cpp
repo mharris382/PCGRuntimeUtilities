@@ -201,8 +201,7 @@ void UISMPhysicsInstigatorComponent::PerformInstigatorUpdate()
 			const float DistanceSqr = FVector::DistSquared(Location, InstanceLocation);
             if (DistanceSqr > FMath::Square(QueryRadius))
             {
-                UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsInstigatorComponent::PerformInstigatorUpdate - Instance %d is outside of query radius (Distance: %.1f)"),
-					InstanceIndex, FMath::Sqrt(DistanceSqr));
+               
                 continue; // Skip if outside of radius (shouldn't happen if query is correct, but just in case)
 			}
             const FVector ImpactNormal = CachedVelocity.GetSafeNormal();

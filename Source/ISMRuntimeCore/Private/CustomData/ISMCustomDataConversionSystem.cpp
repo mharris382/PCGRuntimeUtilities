@@ -4,6 +4,7 @@
 #include "ISMInstanceHandle.h"
 #include "ISMRuntimeComponent.h"
 #include "ISMInstanceDataAsset.h"
+#include "Logging/LogMacros.h"
 #include "CustomData/ISMCustomDataSchema.h"
 #include "CustomData/ISMCustomDataSubsystem.h"
 #include "CustomData/ISMCustomDataMaterialProvider.h"
@@ -42,6 +43,7 @@ FISMCustomDataConversionResult UISMCustomDataConversionSystem::ResolveDMIs(
     FString SkipReason;
     if (!ShouldAttemptConversion(InstanceHandle, &SkipReason))
     {
+		UE_LOG(LogTemp, Warning, TEXT("ISMCustomDataConversionSystem: Skipping DMI resolution — %s"), *SkipReason);
         Result.SkipReason = SkipReason;
         return Result;
     }
@@ -84,13 +86,21 @@ FISMCustomDataConversionResult UISMCustomDataConversionSystem::ResolveDMIs(
         UMaterialInterface* Template = Comp->ManagedISMComponent->GetMaterial(SlotIdx);
         if (!Template)
         {
+			UE_LOG(LogTemp, Warning, TEXT("ISMCustomDataConversionSystem: No material found on ISM for slot %d, skipping DMI resolution for this slot"), SlotIdx);
             continue;
         }
 
         bool bCacheHit = false;
+
+        TArray<float> CustomData = InstanceHandle.GetCustomDataFromISM();
+        UE_LOG(LogTemp, Warning, TEXT("ResolveDMIs: CustomData.Num()=%d, NumSlots=%d, Schema=%s"),
+            CustomData.Num(),
+            ApplicableSlots.Num(),
+            *SchemaName.ToString());
+		UE_LOG(LogTemp, Verbose, TEXT("ISMCustomDataConversionSystem: Resolving DMI for Slot %d with CustomData: %s"), SlotIdx, *FString::JoinBy(CustomData, TEXT(", "), [](float Value) { return FString::SanitizeFloat(Value); }));
         UMaterialInstanceDynamic* DMI = ResolvePooledDMI(
             Template,
-            InstanceHandle.CachedCustomData,
+            CustomData,
             *Schema,
             SlotIdx,
             Sub,
@@ -120,11 +130,16 @@ void UISMCustomDataConversionSystem::ApplyToActor(
 {
     if (!ConvertedActor || !Result.bSuccess)
     {
+        if (!Result.bSuccess)
+        {
+			UE_LOG(LogTemp, Warning, TEXT("ISMCustomDataConversionSystem: Cannot apply DMIs to actor — conversion result unsuccessful: %s"), *Result.SkipReason);
+        }
         return;
     }
 
     for (const TTuple<int32, UMaterialInstanceDynamic*>& Entry : Result.DMIsBySlot)
     {
+		UE_LOG(LogTemp, Verbose, TEXT("ISMCustomDataConversionSystem: Applying DMI to actor - Slot: %d, DMI: %s"), Entry.Key, *GetNameSafe(Entry.Value));
         ApplyDMIToActorSlot(ConvertedActor, Entry.Key, Entry.Value);
     }
 }
@@ -136,6 +151,7 @@ void UISMCustomDataConversionSystem::RefreshActorMaterials(
 {
     if (!ConvertedActor || !World || !InstanceHandle.IsValid())
     {
+		UE_LOG(LogTemp, Warning, TEXT("ISMCustomDataConversionSystem: Cannot refresh actor materials — invalid input"));
         return;
     }
 
@@ -147,6 +163,9 @@ void UISMCustomDataConversionSystem::RefreshActorMaterials(
     {
         ApplyToActor(Result, ConvertedActor);
     }
+    else {
+		UE_LOG(LogTemp, Warning, TEXT("ISMCustomDataConversionSystem: Failed to refresh actor materials — %s"), *Result.SkipReason);
+    }
 }
 
 bool UISMCustomDataConversionSystem::ShouldAttemptConversion(
@@ -156,6 +175,7 @@ bool UISMCustomDataConversionSystem::ShouldAttemptConversion(
     if (!InstanceHandle.IsValid())
     {
         if (OutSkipReason) { *OutSkipReason = TEXT("Instance handle is not valid"); }
+		UE_LOG(LogTemp, Warning, TEXT("ISMCustomDataConversionSystem: Cannot attempt conversion — instance handle is not valid"));
         return false;
     }
 
@@ -163,6 +183,7 @@ bool UISMCustomDataConversionSystem::ShouldAttemptConversion(
     if (!Comp)
     {
         if (OutSkipReason) { *OutSkipReason = TEXT("Component is null"); }
+		UE_LOG(LogTemp, Warning, TEXT("ISMCustomDataConversionSystem: Cannot attempt conversion — component is null"));
         return false;
     }
 
@@ -170,15 +191,17 @@ bool UISMCustomDataConversionSystem::ShouldAttemptConversion(
     if (Comp->InstanceData && !Comp->InstanceData->bUsePICDConversion)
     {
         if (OutSkipReason) { *OutSkipReason = TEXT("bUsePICDConversion is false on InstanceDataAsset"); }
+		UE_LOG(LogTemp, Warning, TEXT("ISMCustomDataConversionSystem: Cannot attempt conversion — bUsePICDConversion is false on InstanceDataAsset"));
         return false;
     }
 
-    // Must have custom data to convert
+    /*// Must have custom data to convert
     if (InstanceHandle.CachedCustomData.Num() == 0)
     {
         if (OutSkipReason) { *OutSkipReason = TEXT("CachedCustomData is empty — no PICD values to map"); }
+		UE_LOG(LogTemp, Warning, TEXT("ISMCustomDataConversionSystem: Cannot attempt conversion — CachedCustomData is empty, no PICD values to map"));
         return false;
-    }
+    }*/
 
     return true;
 }
@@ -196,6 +219,7 @@ const FISMCustomDataSchema* UISMCustomDataConversionSystem::ResolveSchema(
     UISMRuntimeComponent* Comp = InstanceHandle.Component.Get();
     if (!Comp)
     {
+		UE_LOG(LogTemp, Warning, TEXT("ISMCustomDataConversionSystem: Cannot resolve schema — component is null"));
         return nullptr;
     }
 
@@ -211,6 +235,11 @@ const FISMCustomDataSchema* UISMCustomDataConversionSystem::ResolveSchema(
             return Settings->ResolveSchema(ExplicitName);
         }
     }
+    
+    UE_LOG(LogTemp, Warning, TEXT("ResolveSchema: Comp=%s, InstanceData=%s, SchemaName=%s"),
+        *GetNameSafe(Comp),
+        Comp ? *GetNameSafe(Comp->InstanceData) : TEXT("no comp"),
+        Comp && Comp->InstanceData ? *Comp->InstanceData->SchemaName.ToString() : TEXT("no asset"));
 
     // Fall back to project default
     const UISMRuntimeDeveloperSettings* Settings = UISMRuntimeDeveloperSettings::Get();
@@ -219,7 +248,7 @@ const FISMCustomDataSchema* UISMCustomDataConversionSystem::ResolveSchema(
         OutSchemaName = Settings->DefaultSchemaName;
         return Default;
     }
-
+    UE_LOG(LogTemp, Warning, TEXT("ISMCustomDataConversionSystem: No schema specified on InstanceDataAsset, and no project default schema found"));
     return nullptr;
 }
 
@@ -291,6 +320,10 @@ bool UISMCustomDataConversionSystem::ApplyDMIToActorSlot(
 {
     if (!Actor || !DMI)
     {
+        if (!DMI)
+        {
+			UE_LOG(LogTemp, Warning, TEXT("ISMCustomDataConversionSystem: Cannot apply DMI to actor — DMI is null"));
+        }
         return false;
     }
 
@@ -299,16 +332,21 @@ bool UISMCustomDataConversionSystem::ApplyDMIToActorSlot(
     {
         IISMCustomDataMaterialProvider* Provider =
             Cast<IISMCustomDataMaterialProvider>(Actor);
-
+		check(Provider); // Should always succeed if ImplementsInterface returned true
         // Check if actor wants to skip this slot
         if (Provider && IISMCustomDataMaterialProvider::Execute_ShouldSkipSlot(Actor, SlotIndex))
         {
+            
+            UE_LOG(LogTemp, Verbose, TEXT("ISMCustomDataConversionSystem: Actor opted to skip applying DMI to slot "));
             return false;
         }
 
         // Offer the DMI to the actor
         if (Provider)
         {
+            FString s2 = *Actor->GetName();
+//			UE_LOG(LogTemp, Verbose, TEXT("ISMCustomDataConversionSystem: Applying DMI to actor %s via IISMCustomDataMaterialProvider interface - Slot: %d"),s2, SlotIndex);
+            UE_LOG(LogTemp, Verbose, TEXT("ISMCustomDataConversionSystem: Applying DMI to actor "));
             IISMCustomDataMaterialProvider::Execute_ApplyDMIToSlot(Actor, SlotIndex, DMI);
             return true;
         }

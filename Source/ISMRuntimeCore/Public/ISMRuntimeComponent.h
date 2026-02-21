@@ -589,9 +589,15 @@ protected:
 
 
     
-    private:
-        // In private storage:
-        TMap<int32, TArray<float>> InstanceCustomDataCache;
+    /**
+     * Whether this component is currently held by an open batch mutation handle.
+     * While locked, destroyed instance slots are not recycled - their indices are
+     * reserved until the handle is released.
+     */
+    bool IsBatchLocked() const { return bBatchLocked; }
+
+private:
+    bool bBatchLocked = false;
 
 
 

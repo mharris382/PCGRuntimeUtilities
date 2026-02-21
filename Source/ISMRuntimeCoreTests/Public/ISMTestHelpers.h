@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Engine/World.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "ISMRuntimeComponent.h"
 #include "Tests/AutomationCommon.h"
 
 /**

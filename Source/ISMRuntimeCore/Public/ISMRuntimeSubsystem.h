@@ -9,6 +9,7 @@
 
 // Forward declarations
 class UISMRuntimeComponent;
+class UISMBatchScheduler;
 
 /**
  * Statistics for runtime monitoring
@@ -39,7 +40,7 @@ struct FISMRuntimeStats
  * Provides global queries, frame budget management, and component registration.
  */
 UCLASS()
-class ISMRUNTIMECORE_API UISMRuntimeSubsystem : public UWorldSubsystem
+class ISMRUNTIMECORE_API UISMRuntimeSubsystem : public UTickableWorldSubsystem
 {
     GENERATED_BODY()
     
@@ -49,7 +50,23 @@ public:
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
     virtual bool DoesSupportWorldType(EWorldType::Type WorldType) const override;
+
+    // FTickableGameObject - required pure virtual
+    virtual TStatId GetStatId() const override
+    {
+        RETURN_QUICK_DECLARE_CYCLE_STAT(UISMRuntimeSubsystem, STATGROUP_Tickables);
+    }
+
+    virtual bool IsTickable() const override;
+
+    // The actual tick - drives the scheduler
+    virtual void Tick(float DeltaTime) override;
     
+	UISMBatchScheduler* GetBatchScheduler() const { return BatchScheduler; }
+    UISMBatchScheduler* GetOrCreateBatchSchduler();
+
+    UISMBatchScheduler* BatchScheduler = nullptr;
+
     // ===== Component Registration =====
     
     /** Register a runtime component with this subsystem */
@@ -140,6 +157,8 @@ protected:
     
     /** Rebuild tag index for a component */
     void RebuildTagIndexForComponent(UISMRuntimeComponent* Component);
+
+
 };
 /*
 // Template implementation

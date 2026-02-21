@@ -5,6 +5,7 @@
 #include "ISMRuntimeComponent.h"
 #include "ISMInstanceHandle.h"
 #include "ISMInstanceState.h"
+#include "Batching/ISMBatchScheduler.h"
 #include "ISMQueryFilter.h"
 #include "Engine/World.h"
 #include "Logging/LogMacros.h"
@@ -18,12 +19,19 @@ void UISMRuntimeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
     
     UE_LOG(LogTemp, Log, TEXT("ISMRuntimeSubsystem: Initialized for world %s"), 
         *GetWorld()->GetName());
-    
+
     // Reserve some space
     AllComponents.Reserve(32);
     
     CachedStats = FISMRuntimeStats();
     StatsUpdateFrame = 0;
+
+    if (!BatchScheduler)
+    {
+        BatchScheduler = NewObject<UISMBatchScheduler>(this);
+    }
+    BatchScheduler->Initialize(this);
+
 }
 
 void UISMRuntimeSubsystem::Deinitialize()
@@ -31,6 +39,12 @@ void UISMRuntimeSubsystem::Deinitialize()
     // Clean up all registered components
     AllComponents.Empty();
     ComponentsByTag.Empty();
+
+    if(BatchScheduler)
+    {
+        BatchScheduler->Deinitialize();
+        BatchScheduler = nullptr;
+	}
     
     UE_LOG(LogTemp, Log, TEXT("ISMRuntimeSubsystem: Deinitialized"));
     
@@ -44,6 +58,31 @@ bool UISMRuntimeSubsystem::DoesSupportWorldType(EWorldType::Type WorldType) cons
            WorldType == EWorldType::PIE || 
            WorldType == EWorldType::Editor;
 }
+
+bool UISMRuntimeSubsystem::IsTickable() const
+{
+    return BatchScheduler && BatchScheduler->HasPendingWork();
+}
+
+void UISMRuntimeSubsystem::Tick(float DeltaTime)
+{
+    if (BatchScheduler)
+    {
+        BatchScheduler->Tick(DeltaTime);
+	}
+}
+
+UISMBatchScheduler* UISMRuntimeSubsystem::GetOrCreateBatchSchduler()
+{
+	if (!BatchScheduler)
+    {
+        BatchScheduler = NewObject<UISMBatchScheduler>(this);
+        BatchScheduler->Initialize(this);
+    }
+    return BatchScheduler;
+}
+
+
 
 
 #pragma endregion

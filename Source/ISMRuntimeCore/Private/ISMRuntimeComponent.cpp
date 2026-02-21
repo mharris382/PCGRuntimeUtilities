@@ -985,14 +985,6 @@ void UISMRuntimeComponent::SetInstanceCustomData(int32 InstanceIndex, const TArr
 
 float UISMRuntimeComponent::GetInstanceCustomDataValue(int32 InstanceIndex, int32 DataIndex) const
 {
-	if (InstanceCustomDataCache.Contains(InstanceIndex))
-    {
-        const TArray<float>& CachedData = InstanceCustomDataCache[InstanceIndex];
-        if (CachedData.IsValidIndex(DataIndex))
-        {
-            return CachedData[DataIndex];
-        }
-    }
 
     if (!ManagedISMComponent || !IsValidInstanceIndex(InstanceIndex))
     {

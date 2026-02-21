@@ -6,6 +6,7 @@
 #include "ISMInstanceHandle.h"
 #include "ISMInstanceState.h"
 #include "Batching/ISMBatchScheduler.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "ISMQueryFilter.h"
 #include "Engine/World.h"
 #include "Logging/LogMacros.h"
@@ -96,7 +97,7 @@ bool UISMRuntimeSubsystem::RegisterRuntimeComponent(UISMRuntimeComponent* Compon
     {
         return false;
     }
-    
+
     // Check if already registered
     for (const TWeakObjectPtr<UISMRuntimeComponent>& ExistingComp : AllComponents)
     {
@@ -105,10 +106,12 @@ bool UISMRuntimeSubsystem::RegisterRuntimeComponent(UISMRuntimeComponent* Compon
             return true; // Already registered
         }
     }
-    
+
     // Add to main list
     AllComponents.Add(Component);
-    
+
+	FirePendingCallbacksForISM(Component->ManagedISMComponent, Component);
+
     // Index by tags
     RebuildTagIndexForComponent(Component);
     
@@ -201,6 +204,27 @@ TArray<UISMRuntimeComponent*> UISMRuntimeSubsystem::GetComponentsWithTag(FGamepl
 
 
 #pragma region QUERIES
+
+void UISMRuntimeSubsystem::RequestRuntimeComponent(UInstancedStaticMeshComponent* ISM, TFunction<void(UISMRuntimeComponent*)> Callback)
+{
+	if (ISMToRuntimeComponentMap.Contains(ISM))
+    {
+        // Already exists - call immediately
+        if (UISMRuntimeComponent* ExistingComp = ISMToRuntimeComponentMap[ISM].Get())
+        {
+            Callback(ExistingComp);
+            return;
+        }
+    }
+    else
+    {
+        if (!PendingRuntimeComponentCallbacks.Contains(ISM))
+        {
+            PendingRuntimeComponentCallbacks.Add(ISM, TArray<TFunction<void(UISMRuntimeComponent*)>>());
+        }
+        PendingRuntimeComponentCallbacks[ISM].Add(Callback);
+    }
+}
 
 TArray<FISMInstanceReference> UISMRuntimeSubsystem::QueryInstancesInRadius(
     const FVector& Location,
@@ -599,3 +623,27 @@ void UISMRuntimeSubsystem::RebuildTagIndexForComponent(UISMRuntimeComponent* Com
     }
 }
 #pragma endregion
+
+
+void UISMRuntimeSubsystem::FirePendingCallbacksForISM(UInstancedStaticMeshComponent* ISM,UISMRuntimeComponent* RuntimeComponent)
+{
+    if(!ISM || !RuntimeComponent)
+        return;
+    if(PendingRuntimeComponentCallbacks.Contains(ISM))
+    {
+        TArray<TFunction<void(UISMRuntimeComponent*)>> callbacks = PendingRuntimeComponentCallbacks[ISM];
+        for(auto callback : callbacks)
+        {
+            callback(RuntimeComponent);
+        }
+    }
+    PendingRuntimeComponentCallbacks.Remove(ISM);
+    if (ISMToRuntimeComponentMap.Contains(ISM))
+    {
+        UE_LOG(LogTemp, Error, TEXT("ISMRuntimeSubsystem: Attempting to register component %s whose ISM is already registered. This may indicate multiple components managing the same ISM, which can lead to undefined behavior."), *ISM->GetOwner()->GetName());
+    }
+    else
+    {
+        ISMToRuntimeComponentMap.Add(ISM, RuntimeComponent);
+    }
+}

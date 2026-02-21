@@ -86,6 +86,14 @@ public:
     /** Get components implementing a specific interface */
 /*    template<typename InterfaceType>
     TArray<UISMRuntimeComponent*> GetComponentsWithInterface() const;*/
+
+
+    /** 
+     * If a runtime component already exists for this ISM, calls the callback immediately.
+     * If not, registers the callback to fire when one is created.
+     * Safe to call before or after ISMRuntimeActor::BeginPlay.
+     */
+    void RequestRuntimeComponent(UInstancedStaticMeshComponent* ISM,TFunction<void(UISMRuntimeComponent*)> Callback);
     
     // ===== Global Queries =====
     
@@ -144,6 +152,11 @@ protected:
     /** Components indexed by tag for fast lookup */
     TMap<FGameplayTag, TArray<TWeakObjectPtr<UISMRuntimeComponent>>> ComponentsByTag;
     
+    // Populated by RegisterRuntimeComponent - fast lookup for RequestRuntimeComponent
+    TMap<TWeakObjectPtr<UInstancedStaticMeshComponent>, TWeakObjectPtr<UISMRuntimeComponent>> ISMToRuntimeComponentMap;
+    
+    TMap<TWeakObjectPtr<UInstancedStaticMeshComponent>,TArray<TFunction<void(UISMRuntimeComponent*)>>> PendingRuntimeComponentCallbacks;
+
     /** Cached statistics */
     FISMRuntimeStats CachedStats;
     
@@ -158,7 +171,11 @@ protected:
     /** Rebuild tag index for a component */
     void RebuildTagIndexForComponent(UISMRuntimeComponent* Component);
 
-
+    /**
+     * Called at the end of RegisterRuntimeComponent.
+     * Checks PendingRuntimeComponentCallbacks for this ISM and fires any waiting callbacks.
+     */
+    void FirePendingCallbacksForISM(UInstancedStaticMeshComponent* ISM,UISMRuntimeComponent* RuntimeComponent);
 };
 /*
 // Template implementation

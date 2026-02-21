@@ -203,11 +203,6 @@ struct FISMBatchTestFixture
         }
     }
 
-    /**
-     * Add N instances at arbitrary transforms and optionally set custom data.
-     * CustomDataValue is written to slot 0 of each instance.
-     * Returns the indices of the added instances.
-     */
     TArray<int32> AddInstances(int32 Count, float CustomDataValue = 0.0f)
     {
         TArray<FTransform> Transforms;
@@ -219,6 +214,10 @@ struct FISMBatchTestFixture
 
         if (CustomDataValue != 0.0f)
         {
+            // Ensure the ISM has at least 1 custom data slot before writing.
+            // SetCustomDataCount is a no-op if already at or above the requested count.
+            RuntimeComponent->SetCustomDataCount(1, true, 0.0f);
+
             for (int32 Idx : Indices)
             {
                 RuntimeComponent->SetInstanceCustomDataValue(Idx, 0, CustomDataValue);

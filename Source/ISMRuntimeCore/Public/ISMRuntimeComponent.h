@@ -386,13 +386,20 @@ public:
     
     // ===== Custom Data =====
 
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Custom Data")
     TArray<float> GetInstanceCustomData(int32 InstanceIndex) const;
 
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Custom Data")
     void SetInstanceCustomData(int32 InstanceIndex, const TArray<float>& CustomData);
 
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Custom Data")
     float GetInstanceCustomDataValue(int32 InstanceIndex, int32 DataIndex) const;
 
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Custom Data")
     void SetInstanceCustomDataValue(int32 InstanceIndex, int32 DataIndex, float Value);
+
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Custom Data")
+    void SetCustomDataCount(int32 DesiredCount, bool bResetExisting = false, float DefaultValue = 1.0);
 
     // ===== Events =====
 #pragma region EVENTS
@@ -589,13 +596,18 @@ protected:
 
 
     
+public:
     /**
      * Whether this component is currently held by an open batch mutation handle.
      * While locked, destroyed instance slots are not recycled - their indices are
      * reserved until the handle is released.
      */
     bool IsBatchLocked() const { return bBatchLocked; }
-
+	bool SetBatchLocked(bool bLocked) 
+    {
+        bBatchLocked = bLocked;
+        return true;
+    }
 private:
     bool bBatchLocked = false;
 

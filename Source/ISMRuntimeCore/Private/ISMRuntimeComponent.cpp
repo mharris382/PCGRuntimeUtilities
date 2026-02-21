@@ -1028,6 +1028,84 @@ void UISMRuntimeComponent::SetInstanceCustomDataValue(int32 InstanceIndex, int32
     }
 }
 
+void UISMRuntimeComponent::SetCustomDataCount(int32 DesiredCount, bool bResetExisting, float DefaultValue)
+{
+    if (!ManagedISMComponent) return;
+    if (DesiredCount <= 0)    return;
+
+    const int32 CurrentCount = ManagedISMComponent->NumCustomDataFloats;
+
+    if (bResetExisting)
+    {
+        // Rebuild from scratch at the requested size.
+        // UInstancedStaticMeshComponent::SetNumCustomDataFloats clears all instance data.
+        ManagedISMComponent->SetNumCustomDataFloats(DesiredCount);
+
+        // Fill every instance with DefaultValue
+        if (DefaultValue != 0.0f)
+        {
+            const int32 InstanceCount = ManagedISMComponent->GetInstanceCount();
+            for (int32 i = 0; i < InstanceCount; ++i)
+            {
+                for (int32 SlotIdx = 0; SlotIdx < DesiredCount; ++SlotIdx)
+                {
+                    ManagedISMComponent->SetCustomDataValue(i, SlotIdx, DefaultValue, /*bMarkRenderStateDirty=*/false);
+                }
+            }
+            ManagedISMComponent->MarkRenderStateDirty();
+        }
+
+        
+        return;
+    }
+
+    // Non-destructive expand: only act if we are currently shorter than requested
+    if (CurrentCount >= DesiredCount) return;
+
+    // We need to expand from CurrentCount to DesiredCount.
+    // UE doesn't have a "expand and preserve" call directly, so we:
+    //   1. Capture existing data for all instances from our cache
+    //   2. Resize the ISM
+    //   3. Rewrite the existing data + fill new slots with DefaultValue
+
+    const int32 InstanceCount = ManagedISMComponent->GetInstanceCount();
+
+    // Step 1: snapshot existing data before resize clears it
+    TMap<int32, TArray<float>> ExistingData;
+    ExistingData.Reserve(ManagedISMComponent->GetInstanceCount());
+	for (int i = 0; i < InstanceCount; ++i)
+    {
+		ExistingData.Add(i, GetInstanceCustomData(i));
+    }
+
+    // Step 2: resize - this resets all instance custom data to 0 internally
+    ManagedISMComponent->SetNumCustomDataFloats(DesiredCount);
+
+    // Step 3: rewrite preserved data + fill new slots
+    for (int32 i = 0; i < InstanceCount; ++i)
+    {
+        const TArray<float>* OldData = ExistingData.Find(i);
+
+        for (int32 SlotIdx = 0; SlotIdx < DesiredCount; ++SlotIdx)
+        {
+            float Value = DefaultValue;
+
+            if (OldData && SlotIdx < OldData->Num())
+            {
+                // Preserve existing value
+                Value = (*OldData)[SlotIdx];
+            }
+
+            ManagedISMComponent->SetCustomDataValue(i, SlotIdx, Value, false);
+        }
+    }
+
+    ManagedISMComponent->MarkRenderStateDirty();
+}
+
+
+
+
 // ===== State Management (IISMStateProvider) =====
 
 uint8 UISMRuntimeComponent::GetInstanceStateFlags(int32 InstanceIndex) const

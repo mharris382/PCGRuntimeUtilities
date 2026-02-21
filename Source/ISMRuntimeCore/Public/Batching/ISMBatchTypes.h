@@ -113,6 +113,8 @@ struct ISMRUNTIMECORE_API FISMBatchSnapshot
 
     /** Number of instances in this chunk. */
     int32 Num() const { return Instances.Num(); }
+
+    bool IsValid() const;
 };
 
 

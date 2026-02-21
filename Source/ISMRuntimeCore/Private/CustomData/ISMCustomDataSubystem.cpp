@@ -216,11 +216,24 @@ UMaterialInstanceDynamic* UISMCustomDataSubsystem::GetOrCreateDMI(
     // Cache hit
     if (FISMPooledMaterial* Existing = SharedPool.Find(Sig))
     {
-        Existing->LastUsedFrame = GFrameCounter;
-        Existing->RefCount++;
-        SharedPoolStats.CacheHits++;
-        SharedPoolStats.TotalPooledDMIs = SharedPool.Num();
-        return Existing->DMI;
+        if (Existing->DMI && Existing->DMI->IsValidLowLevel() && Existing->DMI->GetRenderProxy())
+        {
+            Existing->LastUsedFrame = GFrameCounter;
+            Existing->RefCount++;
+            SharedPoolStats.CacheHits++;
+            SharedPoolStats.TotalPooledDMIs = SharedPool.Num();
+            return Existing->DMI;
+        }
+
+        // Stale — null DMI or invalid render proxy — evict and fall through to create new
+        UE_LOG(LogISMRuntimeCore, Warning, TEXT("ISMCustomDataSubsystem: Evicting stale DMI for template %s"),
+            Template ? *Template->GetName() : TEXT("null"));
+        if (Existing->DMI)
+        {
+            UE_LOG(LogISMRuntimeCore, Verbose, TEXT("  DMI %s is %s"),*Existing->DMI->GetName(),Existing->DMI->IsValidLowLevel() ? TEXT("valid") : TEXT("invalid"));
+			Existing->DMI->RemoveFromRoot();
+        }
+        SharedPool.Remove(Sig);
     }
 
     // Cache miss — create new DMI
@@ -239,7 +252,7 @@ UMaterialInstanceDynamic* UISMCustomDataSubsystem::GetOrCreateDMI(
     {
         return nullptr;
     }
-
+	NewDMI->AddToRoot(); // Prevent GC — manually managed by pool
     FISMPooledMaterial& Entry = SharedPool.Add(Sig);
     Entry.DMI = NewDMI;
     Entry.LastUsedFrame = GFrameCounter;
@@ -308,6 +321,13 @@ void UISMCustomDataSubsystem::EvictStaleDMIs(int32 MaxAgeFrames)
 
 void UISMCustomDataSubsystem::FlushSharedPool()
 {
+    for (auto& Pair : SharedPool)
+    {
+        if (Pair.Value.DMI)
+        {
+            Pair.Value.DMI->RemoveFromRoot();
+        }
+    }
     SharedPool.Empty();
     SharedPoolStats.TotalPooledDMIs = 0;
 }
@@ -619,6 +639,15 @@ void UISMCustomDataSubsystem::EvictLRUEntry()
 
     if (bFound)
     {
+        // Unroot BEFORE removing from map
+        if (FISMPooledMaterial* Entry = SharedPool.Find(OldestSig))
+        {
+            if (Entry->DMI)
+            {
+                Entry->DMI->RemoveFromRoot();
+            }
+        }
+
         SharedPool.Remove(OldestSig);
         SharedPoolStats.EvictedEntries++;
         SharedPoolStats.TotalPooledDMIs = SharedPool.Num();

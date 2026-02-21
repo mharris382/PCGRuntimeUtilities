@@ -187,10 +187,12 @@ int32 UISMBatchScheduler::DispatchComponentChunks(IISMBatchTransformer* Transfor
 
 	// Track identity BEFORE issuing handle - one entry, no live handle stored
 	TrackNewChunk(TransformerName, Component, FIntVector::ZeroValue, IssuedTime);
-	TArray<FISMBatchSnapshot> IssuedSnapshots;
-	IssuedSnapshots.Add(Snapshot); // copy - transformer owns its snapshot array separately
 
-	Transformer->OnHandleIssued(IssuedSnapshots);
+	/*	TArray<const FISMBatchSnapshot*> SnapshotPtrs;
+	SnapshotPtrs.Add(&Snapshot); // copy - transformer owns its snapshot array separately
+	*/
+
+	Transformer->OnHandleIssued(Snapshot);
 
 	// Issue exactly ONE handle - transformer owns it entirely
 	FISMMutationHandle Handle(

@@ -144,7 +144,7 @@ public:
 
     /** Called when the handle is issued, with the initial set of snapshots.
  *  Override to initialize per-cycle state from snapshot data (e.g. cache original transforms). */
-    virtual void OnHandleIssued(const TArray<FISMBatchSnapshot>& Snapshots) override;
+    virtual void OnHandleIssued(const FISMBatchSnapshot& Snapshot) override;
 
     /** Called if the snapshot set changes during the handle's lifetime (Phase 2: spatial chunks
      *  added/removed as cells enter/leave range). Default is no-op.

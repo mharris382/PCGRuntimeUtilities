@@ -9,7 +9,7 @@
 #include "Logging/LogMacros.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
-
+#include "ISMInstanceState.h"
 #include "CustomData/ISMCustomDataSchema.h"
 #include "CustomData/ISMCustomDataSubsystem.h"
 #include "CustomData/ISMCustomDataMaterialProvider.h"
@@ -26,7 +26,24 @@ bool FISMInstanceHandle::IsValid() const
 
 bool FISMInstanceHandle::IsConvertedToActor() const
 {
-    return ConvertedActor.IsValid();
+    if(ConvertedActor.IsValid()) 
+        return true;
+
+    if (!Component.IsValid())
+    {
+		UE_LOG(LogISMRuntimeCore, Warning, TEXT("FISMInstanceHandle::IsConvertedToActor - Invalid component reference"));
+        return false;
+    }
+    
+    const FISMInstanceState* InstanceState = Component->GetInstanceState(InstanceIndex);
+	
+    if (!InstanceState)
+    {
+		UE_LOG(LogISMRuntimeCore, Warning, TEXT("FISMInstanceHandle::IsConvertedToActor - Invalid instance state for index %d"), InstanceIndex);
+        return false;
+    }
+
+	return InstanceState->HasFlag(EISMInstanceState::Converting);
 }
 
 AActor* FISMInstanceHandle::GetConvertedActor() const
@@ -82,8 +99,10 @@ FGameplayTagContainer FISMInstanceHandle::GetInstanceTags() const
 
 AActor* FISMInstanceHandle::ConvertToActor(const FISMConversionContext& ConversionContext)
 {
+  
     if (!IsValid())
     {
+		UE_LOG(LogISMRuntimeCore, Warning, TEXT("FISMInstanceHandle::ConvertToActor - Invalid instance handle"));
         return nullptr;
     }
 
@@ -96,15 +115,36 @@ AActor* FISMInstanceHandle::ConvertToActor(const FISMConversionContext& Conversi
     UISMRuntimeComponent* Comp = Component.Get();
     if (!Comp)
     {
+		UE_LOG(LogISMRuntimeCore, Warning, TEXT("FISMInstanceHandle::ConvertToActor - Invalid component reference"));
         return nullptr;
     }
+    TFunction<AActor* (const FString&)> Fail = [&](const FString& Msg)
+        {
+            UE_LOG(LogISMRuntimeCore, Warning, TEXT("FISMInstanceHandle::ConvertToActor - %s (index %d)"), *Msg, InstanceIndex);
+            check(Comp);
+			Comp->SetInstanceState(InstanceIndex, EISMInstanceState::Converting, false);
+            return nullptr;
+        };
+
+    const FISMInstanceState* InstanceState = Comp->GetInstanceState(InstanceIndex);
+    if (!InstanceState)
+    {
+		return Fail(TEXT("Invalid instance state"));
+    }
+
+	if (InstanceState->HasFlag(EISMInstanceState::Converting))
+    {
+		return Fail(TEXT("Instance is already converting"));
+    }
+    Comp->SetInstanceState(InstanceIndex, EISMInstanceState::Converting, true);
 
     IISMConvertible* Convertible = Cast<IISMConvertible>(Comp);
     if (!Convertible)
     {
-        return nullptr;
+        return Fail(TEXT("Component does not implement IISMConvertible"));
     }
 
+    
     // Cache state before conversion so ReturnToISM can restore it
     CachedPreConversionTransform = Comp->GetInstanceTransform(InstanceIndex);
 
@@ -119,7 +159,10 @@ AActor* FISMInstanceHandle::ConvertToActor(const FISMConversionContext& Conversi
         // UISMCustomDataConversionSystem handles schema resolution and pool lookup
         UWorld* World = Comp->GetWorld();
         ApplyCustomDataMaterialsToActor(Actor, Comp->GetWorld());
-        
+    }
+    else
+    {
+		return Fail(TEXT("Conversion failed or returned null actor"));
     }
 
     return Actor;
@@ -127,28 +170,40 @@ AActor* FISMInstanceHandle::ConvertToActor(const FISMConversionContext& Conversi
 
 bool FISMInstanceHandle::ReturnToISM(bool bDestroyActor, bool bUpdateTransform)
 {
+  
+    TFunction<bool (const FString&)> Fail = [&](const FString& Msg)  {
+            UE_LOG(LogISMRuntimeCore, Warning, TEXT("FISMInstanceHandle::ReturnToISM - %s (index %d)"), *Msg, InstanceIndex);
+            return false;
+        };
+
+
     if (!IsValid())
     {
         return false;
     }
 
-    AActor* Actor = ConvertedActor.Get();
-    if (!Actor)
-    {
-        return false;
-    }
-
+   
     UISMRuntimeComponent* Comp = Component.Get();
     if (!Comp)
     {
-        return false;
+        return Fail(TEXT("ISMRuntimeComponent is null"));
     }
+
+    AActor* Actor = ConvertedActor.Get();
+    if (!Actor)
+    {
+        Comp->SetInstanceState(InstanceIndex, EISMInstanceState::Converting, false);
+        Comp->ShowInstance(InstanceIndex);
+        return Fail(TEXT("Converted Actor is null"));
+    }
+
+  
+    
+    
 
     const FTransform FinalTransform = Actor->GetActorTransform();
 
-    // Allow component delegate to override destroy decision (e.g. for pooling)
-    bool bShouldDestroyActor = bDestroyActor;
-    Comp->OnReleaseConvertedActor.ExecuteIfBound(Actor, bShouldDestroyActor);
+    
 
     // Update ISM transform to match final actor position
     if (bUpdateTransform)
@@ -190,24 +245,35 @@ bool FISMInstanceHandle::ReturnToISM(bool bDestroyActor, bool bUpdateTransform)
         }
     }
 
-    // Unhide the ISM instance
-    Comp->ShowInstance(InstanceIndex);
+
 
     // Clear conversion state tags
-    Comp->RemoveInstanceTag(InstanceIndex,
-        FGameplayTag::RequestGameplayTag(FName("ISM.State.Converting")));
-    Comp->RemoveInstanceTag(InstanceIndex,
-        FGameplayTag::RequestGameplayTag(FName("ISM.State.Converted")));
+    Comp->RemoveInstanceTag(InstanceIndex,FGameplayTag::RequestGameplayTag(FName("ISM.State.Converting")));
+    Comp->RemoveInstanceTag(InstanceIndex,FGameplayTag::RequestGameplayTag(FName("ISM.State.Converted")));
+
+
+
+ 
+    
+
+    Comp->SetInstanceState(InstanceIndex, EISMInstanceState::Converting, false);
+    Comp->ShowInstance(InstanceIndex);
+
+
+    // Allow component delegate to override destroy decision (e.g. for pooling)
+    bool bShouldDestroyActor = bDestroyActor;
+    Comp->OnReleaseConvertedActor.ExecuteIfBound(Actor, bShouldDestroyActor);
 
     // Broadcast return event before destroying actor
     Comp->OnInstanceReturnedToISM.ExecuteIfBound(*this, FinalTransform);
+
 
     if (bShouldDestroyActor)
     {
         Actor->Destroy();
     }
-
     ConvertedActor.Reset();
+
 
     return true;
 }

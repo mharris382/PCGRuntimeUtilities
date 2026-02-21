@@ -235,7 +235,7 @@ public:
      */
     virtual void OnRequestComplete() {}
 
-    virtual void OnHandleIssued(const TArray<FISMBatchSnapshot>& Snapshots) {}
+    virtual void OnHandleIssued(const FISMBatchSnapshot& Snapshot) {}
 
     virtual void OnHandleChunksChanged(const TArray<FISMBatchSnapshot>& Snapshots) {}
 

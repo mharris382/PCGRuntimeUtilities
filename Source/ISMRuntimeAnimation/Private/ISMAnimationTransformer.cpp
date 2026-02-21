@@ -165,18 +165,15 @@ void FISMAnimationTransformer::OnHandleReleased()
     ResetCache();
 }
 
-void FISMAnimationTransformer::OnHandleIssued(const TArray<FISMBatchSnapshot>& Snapshots)
+void FISMAnimationTransformer::OnHandleIssued(const FISMBatchSnapshot& Chunk)
 {
-	if (Snapshots.Num() == 0)
+    
+    if (Chunk.IsEmpty())
     {
-        UE_LOG(LogISMRuntimeAnimation, Warning, TEXT("Transformer %s issued with empty snapshot array - abandoning handle."), *TransformerName.ToString());
+		UE_LOG(LogISMRuntimeAnimation, Warning, TEXT("Transformer %s received empty chunk - abandoning handle."), *TransformerName.ToString());
         return;
     }
-	if (Snapshots.Num() > 1)
-    {
-        UE_LOG(LogISMRuntimeAnimation, Warning, TEXT("Transformer %s issued with multiple snapshots - but this is not yet implemented. Extra snapshots will be ignored."), *TransformerName.ToString());
-    }
-	FISMBatchSnapshot Chunk = Snapshots[0]; // We only ever request 1 chunk per handle, so this is safe.
+	// We only ever request 1 chunk per handle, so this is safe.
     if (!bOriginalTransformsInitialized)
     {
         RandomStream.Initialize(AnimData->RandomSeed);

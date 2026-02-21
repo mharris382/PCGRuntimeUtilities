@@ -19,6 +19,9 @@ struct FISMQueryFilter;
 struct FISMInstanceState;
 struct FISMFeedbackParticipant;
 
+// Declares a log category symbol other .cpp files can reference
+DECLARE_LOG_CATEGORY_EXTERN(LogISMRuntimeCore, Log, All);
+
 /**
  * Delegate signatures for instance events
  */

@@ -13,7 +13,7 @@
 #include "GameplayTagsManager.h"
 #include "Engine/World.h"
 
-
+DEFINE_LOG_CATEGORY(LogISMRuntimeCore);
 
 UISMRuntimeComponent::UISMRuntimeComponent()
 {

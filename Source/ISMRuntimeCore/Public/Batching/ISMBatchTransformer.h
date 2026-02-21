@@ -234,6 +234,14 @@ public:
      * Not called if BuildRequest() produced zero chunks (nothing to process).
      */
     virtual void OnRequestComplete() {}
+
+    virtual void OnHandleIssued(const TArray<FISMBatchSnapshot>& Snapshots) {}
+
+    virtual void OnHandleChunksChanged(const TArray<FISMBatchSnapshot>& Snapshots) {}
+
+    /** Called when the handle is released OR abandoned.
+     *  Override to reset per-cycle state. Default is no-op. */
+    virtual void OnHandleReleased() {}
 };
 
 

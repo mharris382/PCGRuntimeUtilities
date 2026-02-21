@@ -180,40 +180,27 @@ int32 UISMBatchScheduler::DispatchComponentChunks(IISMBatchTransformer* Transfor
 	{
 		return 0;
 	}
+	FISMBatchSnapshot Snapshot = BuildSnapshot(
+		Component, FIntVector::ZeroValue, AllIndices, Request.ReadMask);
 
-	// Build the snapshot on the game thread (safe UObject access here)
-	FISMBatchSnapshot Snapshot = BuildSnapshot(Component, FIntVector::ZeroValue, AllIndices, Request.ReadMask);
-	// Create the handle for this chunk
-	// Phase 1: generation token unused (no slot reuse locking yet beyond bBatchLocked)
 	const double IssuedTime = FPlatformTime::Seconds();
+
+	// Track identity BEFORE issuing handle - one entry, no live handle stored
+	TrackNewChunk(TransformerName, Component, FIntVector::ZeroValue, IssuedTime);
+	TArray<FISMBatchSnapshot> IssuedSnapshots;
+	IssuedSnapshots.Add(Snapshot); // copy - transformer owns its snapshot array separately
+
+	Transformer->OnHandleIssued(IssuedSnapshots);
+
+	// Issue exactly ONE handle - transformer owns it entirely
 	FISMMutationHandle Handle(
-		TWeakObjectPtr<UISMBatchScheduler>(this),
-		TWeakObjectPtr<UISMRuntimeComponent>(Component),
-		FIntVector::ZeroValue,
-		0,              // generation token - Phase 2 will populate this
-		IssuedTime);
-
-	// Track before dispatch so the cycle count is correct even if ProcessChunk
-	// resolves synchronously inside this call
-	TrackNewChunk(TransformerName, MoveTemp(Handle));
-
-	// Retrieve the handle we just stored and pass a moved copy to the transformer.
-	// TrackNewChunk stores a TSharedPtr<FISMMutationHandle>; we need to give the
-	// transformer a moveable handle. We construct a fresh one here pointing at the
-	// same scheduler so Release/Abandon route correctly.
-	//
-	// Note: In Phase 1, ProcessChunk is synchronous so the handle will be released
-	// before this function returns. The InFlightChunk entry is resolved immediately.
-	FISMMutationHandle TransformerHandle(
 		TWeakObjectPtr<UISMBatchScheduler>(this),
 		TWeakObjectPtr<UISMRuntimeComponent>(Component),
 		FIntVector::ZeroValue,
 		0,
 		IssuedTime);
 
-	// ProcessChunk takes ownership of TransformerHandle by value
-   // The transformer MUST call Release or Abandon before returning (synchronous contract)
-	Transformer->ProcessChunk(MoveTemp(Snapshot), MoveTemp(TransformerHandle));
+	Transformer->ProcessChunk(MoveTemp(Snapshot), MoveTemp(Handle));
 
 	return 1;
 }
@@ -264,11 +251,18 @@ FISMBatchSnapshot UISMBatchScheduler::BuildSnapshot(UISMRuntimeComponent* Compon
 
 void UISMBatchScheduler::DrainAndApplyResults()
 {
+	if (!bInitialized) return;
 	// Drain released results
 	{
 		FISMBatchMutationResult Result;
+
 		while (ReleasedResultQueue.Dequeue(Result))
 		{
+			UISMRuntimeComponent* Target = Result.TargetComponent.Get();
+			if (!Target) {
+				UE_LOG(LogTemp, Warning, TEXT("Received mutation result for a component that no longer exists. Discarding."));
+				continue;  // <-- this guard is missing
+			}
 			ApplyMutationResult(Result);
 
 			// Find which in-flight chunk this corresponds to and mark it resolved
@@ -276,12 +270,11 @@ void UISMBatchScheduler::DrainAndApplyResults()
 			for (FISMInFlightChunk& Chunk : InFlightChunks)
 			{
 				if (!Chunk.bReleased &&
-					Chunk.Handle.IsValid() &&
-					Chunk.Handle->GetTargetComponent() == Result.TargetComponent &&
-					Chunk.Handle->GetCellCoordinates() == Result.CellCoordinates)
+					Chunk.TargetComponent == Result.TargetComponent &&
+					Chunk.CellCoordinates == Result.CellCoordinates)
 				{
 					Chunk.bReleased = true;
-					Chunk.ResolvedResult = Result;
+					//Chunk.ResolvedResult = Result;
 					NotifyChunkResolved(Chunk.TransformerName, false);
 					break;
 				}
@@ -297,9 +290,8 @@ void UISMBatchScheduler::DrainAndApplyResults()
 			for (FISMInFlightChunk& Chunk : InFlightChunks)
 			{
 				if (!Chunk.bReleased && !Chunk.bAbandoned &&
-					Chunk.Handle.IsValid() &&
-					Chunk.Handle->GetTargetComponent() == Key.Component &&
-					Chunk.Handle->GetCellCoordinates() == Key.Cell)
+					Chunk.TargetComponent == Key.Component &&
+					Chunk.CellCoordinates == Key.Cell)
 				{
 					Chunk.bAbandoned = true;
 					Chunk.bReleased = true;    // treat as resolved for cycle tracking
@@ -449,17 +441,19 @@ void UISMBatchScheduler::NotifyChunkResolved(FName TransformerName, bool bWasAba
 	ActiveCycles.RemoveAll([](const FISMTransformerRequestCycle& C) { return C.bComplete; });
 }
 
-FISMInFlightChunk& UISMBatchScheduler::TrackNewChunk(FName TransformerName, FISMMutationHandle&& Handle)
+FISMInFlightChunk& UISMBatchScheduler::TrackNewChunk(
+	FName TransformerName,
+	TWeakObjectPtr<UISMRuntimeComponent> Component,
+	FIntVector CellCoords,
+	double IssuedTime)
 {
 	FISMInFlightChunk& Chunk = InFlightChunks.AddDefaulted_GetRef();
 	Chunk.TransformerName = TransformerName;
-	Chunk.IssuedTimeSeconds = Handle.GetIssuedTime();
+	Chunk.TargetComponent = Component;
+	Chunk.CellCoordinates = CellCoords;
+	Chunk.IssuedTimeSeconds = IssuedTime;
 	Chunk.bReleased = false;
 	Chunk.bAbandoned = false;
-
-	// Store a shared copy for drain-side matching (cell + component identity)
-	Chunk.Handle = MakeShared<FISMMutationHandle>(MoveTemp(Handle));
-
 	return Chunk;
 }
 

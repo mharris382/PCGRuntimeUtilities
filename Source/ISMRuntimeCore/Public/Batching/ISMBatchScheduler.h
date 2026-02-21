@@ -89,25 +89,12 @@ struct FISMTransformerEntry
  */
 struct FISMInFlightChunk
 {
-    /** The open handle for this chunk. Scheduler owns it after dispatch. */
-    // Note: stored as pointer so we can move it into the transformer's ProcessChunk call
-    // and track its lifecycle via the handle's bIsOpen flag reported back via Release/Abandon.
-    TSharedPtr<FISMMutationHandle> Handle;
-
-    /** Resolved result, set by FISMMutationHandle::Release() */
-    TOptional<FISMBatchMutationResult> ResolvedResult;
-
-    /** Whether the handle has been released (result available or abandoned) */
-    bool bReleased = false;
-
-    /** Whether this chunk was abandoned (no result to apply) */
-    bool bAbandoned = false;
-
-    /** The transformer that owns this chunk (for OnRequestComplete bookkeeping) */
-    FName TransformerName;
-
-    /** Time the handle was issued (for timeout enforcement) */
-    double IssuedTimeSeconds = 0.0;
+    FName                                TransformerName;
+    TWeakObjectPtr<UISMRuntimeComponent> TargetComponent;  // identity for matching
+    FIntVector                           CellCoordinates;  // identity for matching
+    double                               IssuedTimeSeconds = 0.0;
+    bool                                 bReleased = false;
+    bool                                 bAbandoned = false;
 };
 
 /**
@@ -304,7 +291,10 @@ private:
     void NotifyChunkResolved(FName TransformerName, bool bWasAbandoned);
 
     /** Create and register a new in-flight chunk entry. Returns a weak ref for tracking. */
-    FISMInFlightChunk& TrackNewChunk(FName TransformerName, FISMMutationHandle&& Handle);
+    FISMInFlightChunk& TrackNewChunk(FName TransformerName,
+        TWeakObjectPtr<UISMRuntimeComponent> Component,
+        FIntVector CellCoords,
+        double IssuedTime);
 
 
     // ===== State =====

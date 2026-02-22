@@ -14,6 +14,15 @@ class UISMCustomDataSubsystem;
 struct FISMCustomDataSchema;
 struct FISMConversionContext;
 
+UENUM(BlueprintType, meta = (Bitflags, UseEnumValuesAsMaskValuesInEditor = "true"))
+enum class EISMInstanceOwnershipState : uint8
+{
+    NONE = 0,
+    Owned = 1 << 0,
+    Possessed = 1 << 1,
+    Attached = 1 << 2
+};
+
 /**
  * Delegate called when a converted actor is being returned to ISM.
  * @param ConvertedActor - The actor being released
@@ -34,6 +43,9 @@ DECLARE_DELEGATE_TwoParams(FOnInstanceConverted, const struct FISMInstanceHandle
  * @param FinalTransform - The final transform from the actor
  */
 DECLARE_DELEGATE_TwoParams(FOnInstanceReturnedToISM, const struct FISMInstanceHandle& /*InstanceHandle*/, const FTransform& /*FinalTransform*/);
+
+
+
 
 /**
  * Stable reference to an ISM instance that persists across its lifetime.
@@ -68,7 +80,10 @@ struct ISMRUNTIMECORE_API FISMInstanceHandle
     /** Transform cached at conversion time, used to restore ISM position on return. */
     FTransform CachedPreConversionTransform;
 
+
+
     FISMInstanceHandle() = default;
+
 
     // ===== State Queries =====
 
@@ -184,7 +199,51 @@ struct ISMRUNTIMECORE_API FISMInstanceHandle
         return HashCombine(GetTypeHash(Handle.Component), Handle.InstanceIndex);
     }
 
+
+    void SetOwner(FGameplayTag OwnerTag);
+    void ClearOwner();
+	bool IsOwned() const { return HasFlag(EISMInstanceOwnershipState::Owned); }
+	bool IsOwnedBy(FGameplayTag Tag) const { return IsOwned() && OwnerTag.MatchesTag(Tag); }
+	FGameplayTag GetOwnerTag() const { return OwnerTag; }
+
+
+
+    // Possession — tag required, actor pointer optional cache
+    void SetPossessor(FGameplayTag PossessorTag, AActor* PossessorActor = nullptr);
+    void CachePossessorActor(AActor* Actor); // update pointer without changing tag
+    void ClearPossessor();
+	bool IsPossessed() const { return HasFlag(EISMInstanceOwnershipState::Possessed); }
+	bool IsPossessedBy(FGameplayTag Tag) const { return IsPossessed() && PossessorTag.MatchesTag(Tag); }
+	bool IsPossessedBy(AActor* Actor) const { return IsPossessed() && CachedPossessorActor == Actor; }
+	
+    FGameplayTag GetPossessorTag() const { return PossessorTag; }
+	AActor* GetPossessorActor() const { return CachedPossessorActor; }
+
+
+    // Attachment — both required, neither optional
+    void SetAttachment(USceneComponent* Parent, FName Socket);
+    void ClearAttachment();
+	bool IsAttached() const { return HasFlag(EISMInstanceOwnershipState::Attached); }
+	USceneComponent* GetAttachParent() const { return AttachParent; }
+	FName GetAttachSocket() const { return AttachSocket; }
+
+
 private:
+
+    bool HasFlag(EISMInstanceOwnershipState State) const
+    {
+        return (OwnershipState & static_cast<uint8>(State)) != 0;
+    }
+
+    uint8 OwnershipState;
+	
+    FGameplayTag OwnerTag;
+	FGameplayTag PossessorTag;
+
+	AActor* CachedPossessorActor;
+
+	USceneComponent* AttachParent = nullptr;
+	FName AttachSocket;
     /**
      * Internal: resolve and apply DMIs to a converted actor from CachedCustomData.
      * Called by WriteCustomData, WriteCustomDataValue, and RefreshConvertedActorMaterials.

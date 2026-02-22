@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -166,11 +167,49 @@ public:
 
 #pragma endregion
 
+
+#pragma region SIMULATION_CONTROL
+
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "ISM Physics")
+    bool ShouldStartKinematic() const;
+    virtual bool ShouldStartKinematic_Implementation() const;
+
+    /**
+     * Check if currently in kinematic mode (not simulating).
+     */
+    UFUNCTION(BlueprintPure, Category = "ISM Physics")
+    bool IsKinematic() const;
+
+    /**
+     * Start simulating physics.
+     * Call when transitioning from kinematic to simulated (e.g., when dropping held object).
+     *
+     * @param InitialVelocity - Optional velocity to apply immediately
+     * @param InitialAngularVelocity - Optional angular velocity
+     */
+    UFUNCTION(BlueprintCallable, Category = "ISM Physics")
+    void StartSimulatingPhysics(FVector InitialVelocity = FVector::ZeroVector, FVector InitialAngularVelocity = FVector::ZeroVector);
+
+    /**
+     * Stop simulating physics and return to kinematic mode.
+     * Call to temporarily pause physics (e.g., when grabbing a falling object).
+     */
+    UFUNCTION(BlueprintCallable, Category = "ISM Physics")
+    void StopSimulatingPhysics();
+
+    protected:
+
+        /** Whether this actor is currently in kinematic mode */
+        bool bIsKinematic = false;
+        bool bIsKinematicInitted = false;
+#pragma endregion
+
+
     // ===== Resting Detection =====
 
 #pragma region RESTING_DETECTION
 
-
+    public:
 /**
  * Check if actor is currently at rest (velocity below threshold).
  * Considers both linear and angular velocity based on data asset settings.
@@ -195,6 +234,11 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "ISM Physics")
     void ReturnToISM();
+
+    UFUNCTION(BlueprintNativeEvent, Category = "ISM Physics")
+    bool CanReturnToISM(FString& Reason) const;
+
+    bool CanReturnToISM_Implementation(FString& Reason) const;
 #pragma endregion
 
     

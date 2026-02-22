@@ -267,20 +267,20 @@ public:
      * Only used in One-Shot mode.
      */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback",
-        meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::OneShot", EditConditionHides))
+        meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::OneShot", EditConditionHides, Categories = "Feedbacks"))
     FGameplayTag ConversionFeedback;
 
     /**
      * Feedback to play when physics actor returns to ISM.
      * Only used in One-Shot mode.
      */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback",
-        meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::OneShot", EditConditionHides))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback", meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::OneShot", EditConditionHides, Categories = "Feedbacks"))
     FGameplayTag ReturnFeedback;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback",
-        meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::OneShot", EditConditionHides))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback", meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::OneShot", EditConditionHides, Categories="Feedbacks"))
     FGameplayTag DestroyFeedback;
+
+    
 
     // --- Continuous Mode (lifecycle event) ---
 
@@ -293,7 +293,7 @@ public:
      * - "Feedback.Physics.Lifecycle.Bomb" -> start fuse, complete on explode, cancel on disarm
      */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback",
-        meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::Continuous", EditConditionHides))
+        meta = (EditCondition = "FeedbackMode == EISMPhysicsFeedbackMode::Continuous", EditConditionHides, Categories = "Feedbacks"))
     FGameplayTag LifecycleFeedbackTag;
 
     /**

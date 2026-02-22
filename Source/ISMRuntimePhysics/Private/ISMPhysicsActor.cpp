@@ -91,31 +91,14 @@ void AISMPhysicsActor::Tick(float DeltaTime)
         return;
     }
     
-    // DIAGNOSTIC LOGGING - Remove after debugging
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-
+    
     // Update resting detection
     UpdateRestingDetection(DeltaTime);
-    
+    FString msg;
     // Auto-return if settled
-    if (ShouldReturnToISM())
+    if (CanReturnToISM(msg))
     {
-        UE_LOG(LogTemp, Log, TEXT("[%s] RETURNING TO ISM - Settled for %.2fs"),
-            *GetName(), TimeAtRest);
+        UE_LOG(LogTemp, Log, TEXT("[%s] RETURNING TO ISM - Settled for %.2fs"), *GetName(), TimeAtRest);
         ReturnToISM();
     }
     
@@ -191,7 +174,23 @@ void AISMPhysicsActor::OnRequestedFromPool_Implementation(UISMPoolDataAsset* Dat
     if (MeshComponent)
     {
         MeshComponent->SetVisibility(true);
-        MeshComponent->SetSimulatePhysics(true);
+        
+		check(!bIsKinematicInitted);//should always be false at this point - if true, means we somehow got here twice without returning to pool, which would be a bug
+        bIsKinematicInitted = false;
+
+        if (ShouldStartKinematic())
+        {
+			StartSimulatingPhysics(FVector::ZeroVector, FVector::ZeroVector);
+            UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("[%s] Started in KINEMATIC mode"), *GetName());
+        }
+        else
+        {
+            // Normal mode: Simulate immediately
+            StopSimulatingPhysics();
+            UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("[%s] Started SIMULATING physics"), *GetName());
+        }
+
+		check(bIsKinematicInitted);//should be true after starting kinematic or simulating physics
     }
 
     if (InstanceHandle.IsValid())
@@ -215,7 +214,9 @@ void AISMPhysicsActor::OnReturnedToPool_Implementation(FTransform& OutFinalTrans
     // Capture final transform
     OutFinalTransform = GetActorTransform();
     bUpdateInstanceTransform = true; // Usually want to update ISM position to match where actor settled
-    
+    bIsKinematicInitted = false;
+
+
     // Play return sound
     PlayReturnFeedback();
     
@@ -376,9 +377,49 @@ void AISMPhysicsActor::ApplyVisualSettings(UISMPhysicsDataAsset* PhysicsDataAsse
         PhysicsDataAsset->ActorScaleMultiplier);
 }
 
+
+#pragma region SIMULATION_CONTROLS
+
+bool AISMPhysicsActor::ShouldStartKinematic_Implementation() const { return false; }
+
+bool AISMPhysicsActor::IsKinematic() const { return bIsKinematic; }
+
+
+void AISMPhysicsActor::StartSimulatingPhysics(FVector InitialVelocity, FVector InitialAngularVelocity)
+{
+    if (!MeshComponent)return;
+    if((bIsKinematicInitted && !bIsKinematic))
+    {
+        return; // Already simulating
+	}
+	bIsKinematic = false;
+	bIsKinematicInitted = true;
+    MeshComponent->SetSimulatePhysics(true);
+    MeshComponent->SetPhysicsLinearVelocity(InitialVelocity);
+    MeshComponent->SetPhysicsAngularVelocityInRadians(InitialAngularVelocity);
+}
+
+void AISMPhysicsActor::StopSimulatingPhysics()
+{
+    if (!MeshComponent)return;
+    if((bIsKinematicInitted && bIsKinematic))
+    {
+        return; // Already kinematic
+	}
+	bIsKinematic = true;
+	bIsKinematicInitted = true;
+    MeshComponent->SetSimulatePhysics(false);
+    MeshComponent->SetPhysicsLinearVelocity(FVector::ZeroVector);
+    MeshComponent->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
+}
+
+#pragma endregion
+
+
 #pragma region RESTING_DETECTION
 
 // ===== Resting Detection =====
+
 
 bool AISMPhysicsActor::IsAtRest() const
 {
@@ -394,6 +435,55 @@ bool AISMPhysicsActor::IsAtRest() const
     return IsVelocityBelowThreshold(LinearVelocity, AngularVelocity);
 }
 
+void AISMPhysicsActor::UpdateRestingDetection(float DeltaTime)
+{
+    if (!PhysicsData.IsValid())
+    {
+        return;
+    }
+    if (bIsKinematic)
+    {
+        TimeAtRest = 0.0f;
+        bWasAtRestLastFrame = false;
+        return;
+    }
+    const bool bAtRest = IsAtRest();
+
+    if (bAtRest)
+    {
+        if (bWasAtRestLastFrame)
+        {
+            // Continue accumulating rest time
+            TimeAtRest += DeltaTime;
+        }
+        else
+        {
+            // Just started resting
+            TimeAtRest = DeltaTime;
+            bWasAtRestLastFrame = true;
+        }
+    }
+    else
+    {
+        // Not at rest - reset timer
+        TimeAtRest = 0.0f;
+        bWasAtRestLastFrame = false;
+    }
+}
+
+#pragma endregion
+
+bool AISMPhysicsActor::CanReturnToISM_Implementation(FString& Reason) const
+{
+    if (!PhysicsData.IsValid())
+    {
+        UE_LOG(LogISMRuntimePhysics, Warning, TEXT("AISMPhysicsActor::ShouldReturnToISM - No valid physics data!"));
+        return false;
+    }
+    return ShouldReturnToISM();
+}
+
+
 bool AISMPhysicsActor::ShouldReturnToISM() const
 {
     if (!PhysicsData.IsValid())
@@ -401,13 +491,15 @@ bool AISMPhysicsActor::ShouldReturnToISM() const
 		UE_LOG(LogISMRuntimePhysics, Warning, TEXT("AISMPhysicsActor::ShouldReturnToISM - No valid physics data!"));
         return false;
     }
-
+   
     // Check if at rest for required duration
     const bool bAtRest = IsAtRest();
     const bool bLongEnough = TimeAtRest >= PhysicsData->RestingCheckDelay;
 
     return bAtRest && bLongEnough;
 }
+
+
 
 void AISMPhysicsActor::ReturnToISM()
 {
@@ -443,6 +535,8 @@ void AISMPhysicsActor::ReturnToISM()
 }
 
 
+
+
 void AISMPhysicsActor::ReturnSelfToPool()
 {
     if (UWorld* World = GetWorld())
@@ -455,7 +549,8 @@ void AISMPhysicsActor::ReturnSelfToPool()
         }
     }
 }
-#pragma endregion
+
+
 
 
 #pragma region FEEDBACKS
@@ -715,36 +810,7 @@ void AISMPhysicsActor::ResetRuntimeState()
     TimeActivated = 0.0;
 }
 
-void AISMPhysicsActor::UpdateRestingDetection(float DeltaTime)
-{
-    if (!PhysicsData.IsValid())
-    {
-        return;
-    }
 
-    const bool bAtRest = IsAtRest();
-
-    if (bAtRest)
-    {
-        if (bWasAtRestLastFrame)
-        {
-            // Continue accumulating rest time
-            TimeAtRest += DeltaTime;
-        }
-        else
-        {
-            // Just started resting
-            TimeAtRest = DeltaTime;
-            bWasAtRestLastFrame = true;
-        }
-    }
-    else
-    {
-        // Not at rest - reset timer
-        TimeAtRest = 0.0f;
-        bWasAtRestLastFrame = false;
-    }
-}
 
 bool AISMPhysicsActor::IsVelocityBelowThreshold(float LinearVelocity, float AngularVelocity) const
 {

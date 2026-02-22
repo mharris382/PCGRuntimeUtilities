@@ -411,3 +411,81 @@ void FISMInstanceHandle::ApplyCustomDataMaterialsToActor(AActor* Actor, UWorld* 
     // schema lookup, pool signature building, DMI creation, and application
     UISMCustomDataConversionSystem::RefreshActorMaterials(*this, Actor, World);
 }
+
+void FISMInstanceHandle::SetOwner(FGameplayTag InOwnerTag)
+{
+    if (!InOwnerTag.IsValid())
+    {
+        return;
+    }
+
+    OwnerTag = InOwnerTag;
+    OwnershipState |= static_cast<uint8>(EISMInstanceOwnershipState::Owned);
+    if (Component.IsValid())Component->BroadcastOwnershipChange(InstanceIndex);
+}
+
+void FISMInstanceHandle::ClearOwner()
+{
+    OwnerTag = FGameplayTag();
+    OwnershipState &= ~static_cast<uint8>(EISMInstanceOwnershipState::Owned);
+    if (Component.IsValid())Component->BroadcastOwnershipChange(InstanceIndex);
+}
+
+void FISMInstanceHandle::SetPossessor(FGameplayTag InPossessorTag, AActor* PossessorActor)
+{
+    if (!InPossessorTag.IsValid())
+    {
+        return;
+    }
+
+    PossessorTag = InPossessorTag;
+    CachedPossessorActor = PossessorActor; // nullptr is fine — tag is the authority
+    OwnershipState |= static_cast<uint8>(EISMInstanceOwnershipState::Possessed);
+
+    if (Component.IsValid()) Component->BroadcastPossessionChange(InstanceIndex);
+}
+
+void FISMInstanceHandle::CachePossessorActor(AActor* Actor)
+{
+    // Only valid to call when already possessed — this rehydrates the pointer,
+    // it does not establish possession. Tag must already be set.
+    if (!IsPossessed())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("FISMInstanceHandle::CachePossessorActor called on "
+            "an instance that is not possessed. Call SetPossessor first."));
+        return;
+    }
+
+    CachedPossessorActor = Actor;
+    if (Component.IsValid()) Component->BroadcastPossessionChange(InstanceIndex);
+}
+
+void FISMInstanceHandle::ClearPossessor()
+{
+    PossessorTag = FGameplayTag();
+    CachedPossessorActor = nullptr;
+    OwnershipState &= ~static_cast<uint8>(EISMInstanceOwnershipState::Possessed);
+    if (Component.IsValid()) Component->BroadcastPossessionChange(InstanceIndex);
+    
+}
+
+void FISMInstanceHandle::SetAttachment(USceneComponent* Parent, FName Socket)
+{
+    if (!Parent) {
+        return;
+    }
+
+    AttachParent = Parent;
+    AttachSocket = Socket; // NAME_None is valid — attaches to root
+    OwnershipState |= static_cast<uint8>(EISMInstanceOwnershipState::Attached);
+    if (Component.IsValid()) Component->BroadcastAttachmentChange(InstanceIndex);
+}
+
+void FISMInstanceHandle::ClearAttachment()
+{
+    AttachParent = nullptr;
+    AttachSocket = NAME_None;
+    OwnershipState &= ~static_cast<uint8>(EISMInstanceOwnershipState::Attached);
+    if (Component.IsValid()) Component->BroadcastAttachmentChange(InstanceIndex);
+}
+

@@ -32,6 +32,11 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInstanceTagsChanged, class UISMR
 //DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnReleaseConvertedActor, class UISMRuntimeComponent*, Component, int32, InstanceIndex, AActor*, ReleasedActor);
 //DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnInstanceConverted, class UISMRuntimeComponent*, Component, int32, InstanceIndex, AActor*, ConvertedActor);
 //DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInstanceReturnedToISM, class UISMRuntimeComponent*, Component, int32, InstanceIndex);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnInstanceOwnerChanged, class UISMRuntimeComponent*, Component, int32, InstanceIndex, FGameplayTag, NewOwnerTag);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnInstancePossessionChanged, class UISMRuntimeComponent*, Component, int32, InstanceIndex, FGameplayTag, PossessorTag, AActor*, PossessorActor);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnInstanceAttachmentChanged, class UISMRuntimeComponent*, Component, int32, InstanceIndex, USceneComponent*, AttachParent, FName, AttachSocket);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInstanceReleased, class UISMRuntimeComponent*, Component, int32, InstanceIndex);
+
 
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnInstanceStateChangedNative, class UISMRuntimeComponent*, int32);
@@ -407,6 +412,9 @@ public:
     // ===== Events =====
 #pragma region EVENTS
 
+	
+
+
     /** Called when instance state changes */
     UPROPERTY(BlueprintAssignable, Category = "ISM Runtime|Events")
     FOnInstanceStateChanged OnInstanceStateChanged;
@@ -432,6 +440,18 @@ public:
 
     /** Called when an instance is returned from actor to ISM */
     FOnInstanceReturnedToISM OnInstanceReturnedToISM;
+
+    UPROPERTY(BlueprintAssignable, Category = "ISM Runtime|Events")
+	FOnInstanceOwnerChanged OnInstanceOwnerChanged;
+
+    UPROPERTY(BlueprintAssignable, Category = "ISM Runtime|Events")
+	FOnInstancePossessionChanged OnInstancePossessionChanged;
+
+    UPROPERTY(BlueprintAssignable, Category = "ISM Runtime|Events")
+	FOnInstanceAttachmentChanged OnInstanceAttachmentChanged;
+
+    UPROPERTY(BlueprintAssignable, Category = "ISM Runtime|Events")
+	FOnInstanceReleased OnInstanceReleased;
 
 #pragma endregion
 
@@ -523,9 +543,7 @@ protected:
     
     /** Get effective tags for an instance (component + per-instance) */
     FGameplayTagContainer GetEffectiveTagsForInstance(int32 InstanceIndex) const;
-    
-    /** Validate instance index */
-    
+
     
     /** Broadcast state change event */
     void BroadcastStateChange(int32 InstanceIndex);
@@ -536,6 +554,12 @@ protected:
     /** Broadcast tag change event */
     void BroadcastTagChange(int32 InstanceIndex);
 
+    public:
+        /** Validate instance index */
+        void BroadcastOwnershipChange(int32 InstanceIndex);
+        void BroadcastPossessionChange(int32 InstanceIndex);
+        void BroadcastAttachmentChange(int32 InstanceIndex);
+        void BroadcastInstanceReleased(int32 InstanceIndex);
 
     /** Get or create a handle for an instance */
     FISMInstanceHandle& GetOrCreateHandle(int32 InstanceIndex);

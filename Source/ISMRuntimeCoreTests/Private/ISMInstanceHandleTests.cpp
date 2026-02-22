@@ -50,7 +50,7 @@ bool FISMInstanceHandleConversionTest::RunTest(const FString& Parameters)
     AActor* TestActor = World->SpawnActor<AActor>();
     
     // ACT
-    Handle.SetConvertedActor(TestActor);
+    Handle.SetConvertedActor(TestActor, 0);
     
     // ASSERT
     TestTrue("Handle should be converted", Handle.IsConvertedToActor());

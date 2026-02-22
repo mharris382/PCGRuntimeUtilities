@@ -92,7 +92,7 @@ public:
         meta = (ClampMin = "0", UIMin = "0", UIMax = "500",
             Tooltip = "Maximum total pool size. 0 = unlimited (use carefully!).",
             EditCondition = "bEnablePooling", EditConditionHides))
-    int32 MaxPoolSize = 0;
+    int32 MaxPoolSize = 100;
 
     /**
      * Allow the pool to destroy unused actors to save memory.

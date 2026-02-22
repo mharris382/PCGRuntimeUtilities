@@ -2,6 +2,7 @@
 #include "Interfaces/ISMPoolable.h"
 #include "ISMPoolDataAsset.h"
 #include "ISMInstanceHandle.h"
+#include "Logging/LogMacros.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -88,6 +89,7 @@ AActor* FISMRuntimeActorPool::RequestActor(UISMPoolDataAsset* DataAsset, const F
     // Try to get an available actor
     if (AvailableActors.Num() > 0)
     {
+        UE_LOG(LogTemp, Verbose, TEXT("FISMRuntimeActorPool::RequestActor - %d available actors in pool for %s"), AvailableActors.Num(), *ActorClass->GetName());
         // Get from end for better cache performance
         TWeakObjectPtr<AActor> ActorPtr = AvailableActors.Pop();
         Actor = ActorPtr.Get();
@@ -96,6 +98,7 @@ AActor* FISMRuntimeActorPool::RequestActor(UISMPoolDataAsset* DataAsset, const F
         {
             // Actor was destroyed externally, try next
             CleanupInvalidActors();
+			UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::RequestActor - Found null actor in available list, cleaning up and trying again"));
             return RequestActor(DataAsset, InstanceHandle); // Recursive call
         }
     }
@@ -118,8 +121,19 @@ AActor* FISMRuntimeActorPool::RequestActor(UISMPoolDataAsset* DataAsset, const F
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::RequestActor - Pool exhausted and cannot grow! MaxPoolSize=%d"),
-                PoolConfig->MaxPoolSize);
+            UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::RequestActor - Pool exhausted and cannot grow! MaxPoolSize=%d"), PoolConfig->MaxPoolSize);
+            if (ActiveActors.Num() > 0)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::RequestActor - Active actors:"));
+                for (const TWeakObjectPtr<AActor>& ActorPtr : ActiveActors)
+                {
+                    if (AActor* ActiveActor = ActorPtr.Get())
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("  - %s"), *ActiveActor->GetName());
+						return ActiveActor; // Return an active actor as a last resort (potentially unsafe)
+                    }
+				}
+            }
             return nullptr;
         }
     }
@@ -163,19 +177,28 @@ bool FISMRuntimeActorPool::ReturnActor(AActor* Actor, FTransform& OutFinalTransf
 
     if (!ValidateOperation(TEXT("ReturnActor")))
     {
+		UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::ReturnActor - Invalid pool state, cannot return actor"));
+        return false;
+    }
+	UE_LOG(LogTemp, Verbose, TEXT("FISMRuntimeActorPool::ReturnActor - Returning actor %s to pool"), *Actor->GetName());
+	if (!ActiveActors.Contains(Actor) )
+    {
+        if (!AvailableActors.Contains(Actor))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::ReturnActor - Actor %s is not active or availble??"), *Actor->GetName());
+            // Update stats
+            Stats.TotalReturns++;
+            Stats.ActiveActors = ActiveActors.Num();
+            Stats.AvailableActors = AvailableActors.Num();
+			AvailableActors.Add(Actor);
+        }
+        UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::ReturnActor - Actor %s is already returned to the pool"),*Actor->GetName());
         return false;
     }
 
-    // Check if actor belongs to this pool
-    const int32 ActiveIndex = ActiveActors.IndexOfByPredicate([Actor](const TWeakObjectPtr<AActor>& Ptr)
-        {
-            return Ptr.Get() == Actor;
-        });
-
-    if (ActiveIndex == INDEX_NONE)
+	if (!ContainsActor(Actor))
     {
-        UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::ReturnActor - Actor %s does not belong to this pool"),
-            *Actor->GetName());
+        UE_LOG(LogTemp, Warning, TEXT("FISMRuntimeActorPool::ReturnActor - Actor %s does not belong to this pool!"), *Actor->GetName());
         return false;
     }
 
@@ -196,7 +219,7 @@ bool FISMRuntimeActorPool::ReturnActor(AActor* Actor, FTransform& OutFinalTransf
     ResetActor(Actor);
 
     // Move from active to available
-    ActiveActors.RemoveSingleSwap(Actor, EAllowShrinking::No); // Don't shrink array for performance
+    ActiveActors.Remove(Actor); // Don't shrink array for performance
     AvailableActors.Add(Actor);
 
     // Update stats
@@ -220,26 +243,7 @@ bool FISMRuntimeActorPool::ContainsActor(AActor* Actor) const
     {
         return false;
     }
-
-    // Check active actors
-    for (const TWeakObjectPtr<AActor>& ActorPtr : ActiveActors)
-    {
-        if (ActorPtr.Get() == Actor)
-        {
-            return true;
-        }
-    }
-
-    // Check available actors
-    for (const TWeakObjectPtr<AActor>& ActorPtr : AvailableActors)
-    {
-        if (ActorPtr.Get() == Actor)
-        {
-            return true;
-        }
-    }
-
-    return false;
+    return AllActors.Contains(Actor);
 }
 
 // ===== Pool Management =====
@@ -464,13 +468,15 @@ AActor* FISMRuntimeActorPool::SpawnPoolActor(bool bIsPreWarm)
     SpawnParams.ObjectFlags |= RF_Transient; // Don't save pooled actors
 
     AActor* Actor = World->SpawnActor<AActor>(ActorClass, FTransform::Identity, SpawnParams);
-
+	
     if (!Actor)
     {
         UE_LOG(LogTemp, Error, TEXT("FISMRuntimeActorPool::SpawnPoolActor - Failed to spawn actor of class %s"),
             *ActorClass->GetName());
         return nullptr;
     }
+
+    AllActors.Add(Actor);
 
     // Apply default reset to ensure clean state
     ApplyDefaultReset(Actor);

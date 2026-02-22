@@ -20,7 +20,7 @@ struct FISMPoolCleanupConfig
 
     /** Enable automatic cleanup of stale pools */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool Cleanup")
-    bool bEnableStalePoolCleanup = true;
+    bool bEnableStalePoolCleanup = false;
 
     /** Number of frames a pool can be unused before considered stale */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pool Cleanup",

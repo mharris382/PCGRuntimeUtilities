@@ -56,8 +56,8 @@ public:
     
     /** Convert this instance to another representation (e.g., physics actor) */
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "ISM Runtime|Conversion")
-    AActor* ConvertInstance(int32 InstanceIndex, const FISMConversionContext& Context);
-    virtual AActor* ConvertInstance_Implementation(int32 InstanceIndex, const FISMConversionContext& Context) { return nullptr; }
+    AActor* ConvertInstance(int32 InstanceIndex, const FISMConversionContext& Context, int32& ConvertedActorCounter);
+    virtual AActor* ConvertInstance_Implementation(int32 InstanceIndex, const FISMConversionContext& Context, int32& ConvertedActorCounter) { return nullptr; }
     
     /** Called after successful conversion */
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "ISM Runtime|Conversion")

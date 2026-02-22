@@ -109,6 +109,9 @@ struct ISMRUNTIMEPOOLS_API FISMRuntimeActorPool
     /** Actors currently in use (not in pool) */
     TArray<TWeakObjectPtr<AActor>> ActiveActors;
 
+
+    TSet<AActor*> AllActors;
+
     // ===== Statistics =====
 
     /** Runtime statistics for this pool */

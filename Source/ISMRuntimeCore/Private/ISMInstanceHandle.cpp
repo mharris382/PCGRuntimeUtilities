@@ -148,12 +148,13 @@ AActor* FISMInstanceHandle::ConvertToActor(const FISMConversionContext& Conversi
     // Cache state before conversion so ReturnToISM can restore it
     CachedPreConversionTransform = Comp->GetInstanceTransform(InstanceIndex);
 
+	int32 ActorCounter = 0;
     // Perform the conversion via the component's implementation
-    AActor* Actor = Convertible->ConvertInstance(InstanceIndex, ConversionContext);
+    AActor* Actor = Convertible->ConvertInstance(InstanceIndex, ConversionContext, ActorCounter);
 
     if (Actor)
     {
-        SetConvertedActor(Actor);
+        SetConvertedActor(Actor, ActorCounter);
 
         // Resolve and apply pooled DMIs based on cached custom data
         // UISMCustomDataConversionSystem handles schema resolution and pool lookup
@@ -278,8 +279,10 @@ bool FISMInstanceHandle::ReturnToISM(bool bDestroyActor, bool bUpdateTransform)
     return true;
 }
 
-void FISMInstanceHandle::SetConvertedActor(AActor* Actor)
+void FISMInstanceHandle::SetConvertedActor(AActor* Actor, int32 counter)
 {
+    if (!Actor)
+        return;
     ConvertedActor = Actor;
 
     if (UISMRuntimeComponent* Comp = Component.Get())
@@ -290,7 +293,10 @@ void FISMInstanceHandle::SetConvertedActor(AActor* Actor)
         Comp->OnInstanceConvertedToActor.ExecuteIfBound(*this, Actor);
 		
     }
+	CachedActorActivationCount = counter;
 }
+
+
 
 void FISMInstanceHandle::ClearConvertedActor()
 {

@@ -41,9 +41,9 @@ void UISMRuntimeSubsystem::Deinitialize()
     AllComponents.Empty();
     ComponentsByTag.Empty();
 
-    if(BatchScheduler)
+    if(BatchScheduler && IsValid(BatchScheduler))
     {
-        BatchScheduler->Deinitialize();
+        //BatchScheduler->Deinitialize();
         BatchScheduler = nullptr;
 	}
     

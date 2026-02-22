@@ -10,6 +10,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "DrawDebugHelpers.h"
 
+
+
+
 UISMPhysicsComponent::UISMPhysicsComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
@@ -21,7 +24,7 @@ namespace
 {
     void LogGeminiCurseWarning(const FString& ComponentName)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent '%s' - Gemini Curse is enabled! This allows multiple physics actors per instance but can cause visual and gameplay issues. Use with caution."), *ComponentName);
+        UE_LOG(LogISMRuntimePhysics, Warning, TEXT("UISMPhysicsComponent '%s' - Gemini Curse is enabled! This allows multiple physics actors per instance but can cause visual and gameplay issues. Use with caution."), *ComponentName);
 	}
 }
 
@@ -38,18 +41,18 @@ void UISMPhysicsComponent::BeginPlay()
         
         if (!PoolSubsystem.IsValid())
         {
-            UE_LOG(LogTemp, Error, TEXT("UISMPhysicsComponent::BeginPlay - Failed to get pool subsystem!"));
+            UE_LOG(LogISMRuntimePhysics, Error, TEXT("UISMPhysicsComponent::BeginPlay - Failed to get pool subsystem!"));
         }
     }
     
     // Validate configuration
     if (!PhysicsData)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::BeginPlay - PhysicsData not set on %s!"), 
+        UE_LOG(LogISMRuntimePhysics, Warning, TEXT("UISMPhysicsComponent::BeginPlay - PhysicsData not set on %s!"),
             *GetOwner()->GetName());
     }
     
-    UE_LOG(LogTemp, Log, TEXT("UISMPhysicsComponent::BeginPlay - Physics component initialized (Query Mode: %s, Limiters: %s)"),
+    UE_LOG(LogISMRuntimePhysics, Log, TEXT("UISMPhysicsComponent::BeginPlay - Physics component initialized (Query Mode: %s, Limiters: %s)"),
         QueryMode == EPhysicsQueryMode::ISMSpatial ? TEXT("ISM Spatial") : TEXT("Physics Engine"),
         bEnableLimiters ? TEXT("Enabled") : TEXT("Disabled"));
 }
@@ -107,14 +110,14 @@ void UISMPhysicsComponent::OnInstanceDataAssigned()
 {
     if(!InstanceData)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::OnInstanceDataAssigned - Assigned null InstanceData on %s"), *GetOwner()->GetName());
+        UE_LOG(LogISMRuntimePhysics, Warning, TEXT("UISMPhysicsComponent::OnInstanceDataAssigned - Assigned null InstanceData on %s"), *GetOwner()->GetName());
         return;
 	}
 	check(InstanceData);
 	PhysicsData = Cast<UISMPhysicsDataAsset>(InstanceData);
     if(!PhysicsData)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::OnInstanceDataAssigned - Assigned InstanceData is not a UISMPhysicsDataAsset on %s"), *GetOwner()->GetName());
+        UE_LOG(LogISMRuntimePhysics, Warning, TEXT("UISMPhysicsComponent::OnInstanceDataAssigned - Assigned InstanceData is not a UISMPhysicsDataAsset on %s"), *GetOwner()->GetName());
 	}
     check(PhysicsData);
 }
@@ -124,7 +127,7 @@ void UISMPhysicsComponent::OnInitializationComplete()
     Super::OnInitializationComplete();
     
     // Additional physics-specific initialization
-    UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::OnInitializationComplete - %s"), *GetOwner()->GetName());
+    UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("UISMPhysicsComponent::OnInitializationComplete - %s"), *GetOwner()->GetName());
 }
 
 void UISMPhysicsComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
@@ -143,7 +146,7 @@ AActor* UISMPhysicsComponent::ConvertInstanceToPhysics(int32 InstanceIndex, FVec
     // Validate instance
     if (!IsValidInstanceIndex(InstanceIndex))
     {
-        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Invalid instance index %d"), InstanceIndex);
+        UE_LOG(LogISMRuntimePhysics, Warning, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Invalid instance index %d"), InstanceIndex);
         return nullptr;
     }
 
@@ -153,14 +156,14 @@ AActor* UISMPhysicsComponent::ConvertInstanceToPhysics(int32 InstanceIndex, FVec
     // Check if instance is already converted (ignore safety check if Gemini Curse enabled, as multiple actors per instance is allowed in that case)
     if (!bApplyGeminiCurse && IsInstanceConverted(InstanceIndex))
     {
-        UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Instance %d already converted"), InstanceIndex);
+        UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Instance %d already converted"), InstanceIndex);
         return nullptr;
     }
-
+	
     // Check if conversion should be allowed
     if (!ShouldAllowConversion(InstanceIndex, ImpactForce))
     {
-        UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Conversion denied by limiters"));
+        UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Conversion denied by limiters"));
         return nullptr;
     }
 
@@ -174,7 +177,7 @@ AActor* UISMPhysicsComponent::ConvertInstanceToPhysics(int32 InstanceIndex, FVec
     FISMInstanceHandle Handle = GetInstanceHandle(InstanceIndex);
     if (!Handle.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Failed to get instance handle"));
+        UE_LOG(LogISMRuntimePhysics, Error, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Failed to get instance handle"));
         return nullptr;
     }
     
@@ -185,7 +188,7 @@ AActor* UISMPhysicsComponent::ConvertInstanceToPhysics(int32 InstanceIndex, FVec
     AISMPhysicsActor* PhysicsActor = SpawnPhysicsActorFromPool(Handle);
     if (!PhysicsActor)
     {
-        UE_LOG(LogTemp, Error, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Failed to spawn physics actor"));
+        UE_LOG(LogISMRuntimePhysics, Error, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Failed to spawn physics actor"));
         return nullptr;
     }
     
@@ -194,8 +197,9 @@ AActor* UISMPhysicsComponent::ConvertInstanceToPhysics(int32 InstanceIndex, FVec
         // Hide the ISM instance (visual is now represented by physics actor)
         HideInstance(InstanceIndex, false); // Don't update bounds for performance
 
+		UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Instance %d converted to actor %s. Activation Count = %d"), InstanceIndex, *PhysicsActor->GetName(), PhysicsActor->GetPoolActivationCount());
         // Mark the handle as converted (this tracks conversion state)
-        Handle.SetConvertedActor(PhysicsActor);
+        Handle.SetConvertedActor(PhysicsActor, PhysicsActor->GetPoolActivationCount());
     }
 	Handle.RefreshConvertedActorMaterials(GetWorld());
     
@@ -215,7 +219,7 @@ AActor* UISMPhysicsComponent::ConvertInstanceToPhysics(int32 InstanceIndex, FVec
     // Broadcast event
     OnPhysicsConversion.Broadcast(InstanceIndex, PhysicsActor);
     
-    UE_LOG(LogTemp, Log, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Converted instance %d (Active: %d, Total: %d)"),
+    UE_LOG(LogISMRuntimePhysics, Log, TEXT("UISMPhysicsComponent::ConvertInstanceToPhysics - Converted instance %d (Active: %d, Total: %d)"),
         InstanceIndex, ActivePhysicsActors.Num(), TotalConversions);
     
     return PhysicsActor;
@@ -223,7 +227,7 @@ AActor* UISMPhysicsComponent::ConvertInstanceToPhysics(int32 InstanceIndex, FVec
 
 void UISMPhysicsComponent::ReturnAllToISM(bool bUpdateTransforms)
 {
-    UE_LOG(LogTemp, Log, TEXT("UISMPhysicsComponent::ReturnAllToISM - Returning %d actors"), ActivePhysicsActors.Num());
+    UE_LOG(LogISMRuntimePhysics, Log, TEXT("UISMPhysicsComponent::ReturnAllToISM - Returning %d actors"), ActivePhysicsActors.Num());
     
     // Return all active physics actors
     for (const TWeakObjectPtr<AISMPhysicsActor>& ActorPtr : ActivePhysicsActors)
@@ -297,15 +301,20 @@ bool UISMPhysicsComponent::ShouldAllowConversion(int32 InstanceIndex, float Impa
 
 AISMPhysicsActor* UISMPhysicsComponent::SpawnPhysicsActorFromPool(const FISMInstanceHandle& InstanceHandle)
 {
+	if (!InstanceHandle.IsValid())
+    {
+        UE_LOG(LogISMRuntimePhysics, Error, TEXT("UISMPhysicsComponent::SpawnPhysicsActorFromPool - Invalid instance handle"));
+        return nullptr;
+    }
     if (!PoolSubsystem.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("UISMPhysicsComponent::SpawnPhysicsActorFromPool - Pool subsystem invalid"));
+        UE_LOG(LogISMRuntimePhysics, Error, TEXT("UISMPhysicsComponent::SpawnPhysicsActorFromPool - Pool subsystem invalid"));
         return nullptr;
     }
     
     if (!PhysicsData)
     {
-        UE_LOG(LogTemp, Error, TEXT("UISMPhysicsComponent::SpawnPhysicsActorFromPool - PhysicsData not set"));
+        UE_LOG(LogISMRuntimePhysics, Error, TEXT("UISMPhysicsComponent::SpawnPhysicsActorFromPool - PhysicsData not set"));
         return nullptr;
     }
     
@@ -313,7 +322,7 @@ AISMPhysicsActor* UISMPhysicsComponent::SpawnPhysicsActorFromPool(const FISMInst
     TSubclassOf<AActor> ActorClass = PhysicsData->PooledActorClass;
     if (!ActorClass)
     {
-        UE_LOG(LogTemp, Error, TEXT("UISMPhysicsComponent::SpawnPhysicsActorFromPool - PooledActorClass not set in data asset"));
+        UE_LOG(LogISMRuntimePhysics, Error, TEXT("UISMPhysicsComponent::SpawnPhysicsActorFromPool - PooledActorClass not set in data asset"));
         return nullptr;
     }
 	//TODO: verify that the class is of subtype ISMPhysicsActor for safety
@@ -322,12 +331,15 @@ AISMPhysicsActor* UISMPhysicsComponent::SpawnPhysicsActorFromPool(const FISMInst
     AActor* Actor = PoolSubsystem->RequestActor(ActorClass, PhysicsData, InstanceHandle);
     if (!Actor)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::SpawnPhysicsActorFromPool - Pool exhausted or failed to spawn"));
+        UE_LOG(LogISMRuntimePhysics, Warning, TEXT("UISMPhysicsComponent::SpawnPhysicsActorFromPool - Pool exhausted or failed to spawn"));
+        return nullptr;
+
     }
-	AISMPhysicsActor* ISMActor = Cast<AISMPhysicsActor>(Actor);
+	TObjectPtr<AISMPhysicsActor> ISMActor = Cast<AISMPhysicsActor>(Actor);
     if (!ISMActor)
     {
-        UE_LOG(LogTemp, Warning, TEXT("UISMPhysicsComponent::Spawned Actor was not of Type ISMPhysicsActor!"));
+        UE_LOG(LogISMRuntimePhysics, Warning, TEXT("UISMPhysicsComponent::Spawned Actor was not of Type ISMPhysicsActor!"));
+        return nullptr;
     }
 	ISMActor->SetInstanceHandle(InstanceHandle);
 	
@@ -341,7 +353,7 @@ void UISMPhysicsComponent::HandleActorOverflow()
         return;
     }
     
-    UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::HandleActorOverflow - Handling overflow (Behavior: %d)"), 
+    UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("UISMPhysicsComponent::HandleActorOverflow - Handling overflow (Behavior: %d)"),
         static_cast<int32>(ActorOverflowBehavior));
     
     switch (ActorOverflowBehavior)
@@ -370,7 +382,7 @@ void UISMPhysicsComponent::ReturnOldestActor()
     // First actor in array is oldest (since we add to end)
     if (AISMPhysicsActor* OldestActor = ActivePhysicsActors[0].Get())
     {
-        UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::ReturnOldestActor - Returning oldest actor"));
+        UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("UISMPhysicsComponent::ReturnOldestActor - Returning oldest actor"));
         OldestActor->ReturnToISM();
     }
 }
@@ -402,7 +414,7 @@ void UISMPhysicsComponent::ReturnFarthestActor()
     
     if (FarthestActor)
     {
-        UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::ReturnFarthestActor - Returning farthest actor (Distance: %.1f)"),
+        UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("UISMPhysicsComponent::ReturnFarthestActor - Returning farthest actor (Distance: %.1f)"),
             FMath::Sqrt(FarthestDistanceSq));
         FarthestActor->ReturnToISM();
     }
@@ -430,7 +442,7 @@ void UISMPhysicsComponent::ApplyConversionImpulse(AActor* PhysicsActor, FVector 
     // Apply impulse at impact point
     RootPrimitive->AddImpulseAtLocation(Impulse, ImpactPoint);
     
-    UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::ApplyConversionImpulse - Applied impulse: %.1f at %s"),
+    UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("UISMPhysicsComponent::ApplyConversionImpulse - Applied impulse: %.1f at %s"),
         ImpactForce, *ImpactPoint.ToString());
 }
 
@@ -463,7 +475,7 @@ void UISMPhysicsComponent::EnforceDistanceLimits()
     // Return actors beyond distance
     for (AISMPhysicsActor* Actor : ActorsToReturn)
     {
-        UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::EnforceDistanceLimits - Returning actor beyond max distance"));
+        UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("UISMPhysicsComponent::EnforceDistanceLimits - Returning actor beyond max distance"));
         Actor->ReturnToISM();
     }
 }
@@ -554,7 +566,7 @@ void UISMPhysicsComponent::RegisterActorReturnCallback(AISMPhysicsActor* Physics
                         // Update stats
                         TotalReturns++;
 
-                        UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::OnInstanceReturnedToISM - Instance %d returned to ISM at %s with scale %s (Active: %d, Total Returns: %d)"),
+                        UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("UISMPhysicsComponent::OnInstanceReturnedToISM - Instance %d returned to ISM at %s with scale %s (Active: %d, Total Returns: %d)"),
                             InstanceIndex, *FinalTransform.GetLocation().ToString(), *FinalTransform.GetScale3D().ToString(), ActivePhysicsActors.Num(), TotalReturns);
                     }
                 });
@@ -574,7 +586,7 @@ void UISMPhysicsComponent::RegisterActorReturnCallback(AISMPhysicsActor* Physics
                         // Update stats
                         TotalReturns++;
 
-                        UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::OnInstanceReturnedToISM - Instance %d returned to ISM (Active: %d, Total Returns: %d)"),
+                        UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("UISMPhysicsComponent::OnInstanceReturnedToISM - Instance %d returned to ISM (Active: %d, Total Returns: %d)"),
                             InstanceIndex, ActivePhysicsActors.Num(), TotalReturns);
                     }
                 });
@@ -647,7 +659,7 @@ void UISMPhysicsComponent::HandlePrevPooledActorIfGeminiCursed(const FISMInstanc
     {
         if (AISMPhysicsActor* PhysicsActor = Cast<AISMPhysicsActor>(Actor))
         {
-            UE_LOG(LogTemp, Verbose, TEXT("UISMPhysicsComponent::OnActorWillConvert_GeminiCursed - Returning existing actor for instance %d before converting new one"), Handle.InstanceIndex);
+            UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("UISMPhysicsComponent::OnActorWillConvert_GeminiCursed - Returning existing actor for instance %d before converting new one"), Handle.InstanceIndex);
             PhysicsActor->ReturnToISM();
         }
     }

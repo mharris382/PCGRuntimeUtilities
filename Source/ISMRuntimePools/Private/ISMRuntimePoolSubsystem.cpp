@@ -222,6 +222,16 @@ FISMRuntimeActorPool* UISMRuntimePoolSubsystem::FindPoolForActor(AActor* Actor)
         return nullptr;
     }
 
+    UE_LOG(LogTemp, Warning, TEXT("FindPoolForActor: Looking for %s (Class: %s), Pools: %d"),
+        *Actor->GetName(), *Actor->GetClass()->GetName(), ActorPools.Num());
+
+    for (auto& Pair : ActorPools)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("  Pool key class: %s, ContainsActor: %s"),
+            *Pair.Key->GetName(),
+            Pair.Value.ContainsActor(Actor) ? TEXT("YES") : TEXT("NO"));
+    }
+
     // Search all pools for this actor
     for (auto& Pair : ActorPools)
     {
@@ -313,7 +323,10 @@ int32 UISMRuntimePoolSubsystem::CleanupStalePools()
     {
         const FISMPoolStats& Stats = Pair.Value.GetStats();
         const uint64 FramesSinceLastAccess = CurrentFrame - Stats.LastAccessFrame;
-
+        if(Pair.Value.ActiveActors.Num() > 0)
+        {
+            continue; // Skip pools that are still active
+		}
         if (FramesSinceLastAccess > FrameThreshold)
         {
             PoolsToDestroy.Add(Pair.Key);

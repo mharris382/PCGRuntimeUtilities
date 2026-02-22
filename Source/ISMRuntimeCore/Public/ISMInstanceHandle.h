@@ -62,7 +62,7 @@ struct ISMRUNTIMECORE_API FISMInstanceHandle
     UPROPERTY(BlueprintReadOnly, Category = "ISM Runtime")
     TWeakObjectPtr<AActor> ConvertedActor;
 
-    
+    int32 CachedActorActivationCount = -1;
     //TArray<float> CachedCustomData;
 
     /** Transform cached at conversion time, used to restore ISM position on return. */
@@ -112,8 +112,8 @@ struct ISMRUNTIMECORE_API FISMInstanceHandle
      * Set the converted actor reference. Called by ConvertToActor after the actor
      * is successfully spawned. Fires OnInstanceConvertedToActor delegate.
      */
-    void SetConvertedActor(AActor* Actor);
-
+    void SetConvertedActor(AActor* Actor, int32 counter);
+    
     /**
      * Clear the converted actor reference without going through ReturnToISM.
      * Use when the actor was destroyed externally (e.g. killed by damage system).

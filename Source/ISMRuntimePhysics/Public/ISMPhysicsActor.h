@@ -10,6 +10,8 @@
 #include "CustomData/ISMCustomDataMaterialProvider.h"
 #include "ISMPhysicsActor.generated.h"
 
+DECLARE_LOG_CATEGORY_EXTERN(LogISMRuntimePhysics, Log, All);
+
 // Forward declarations
 class UStaticMeshComponent;
 class UISMPhysicsDataAsset;
@@ -62,6 +64,10 @@ public:
      */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UStaticMeshComponent> MeshComponent;
+
+    // In AISMPhysicsActor - must be UPROPERTY to prevent GC
+    UPROPERTY()
+    TArray<UMaterialInstanceDynamic*> CachedDMIs;
 
     // ===== Actor Lifecycle =====
     
@@ -339,9 +345,10 @@ protected:
 
 #pragma endregion
 
-	
-
+    int32 PoolActivationCount = 0;
+    void ReturnSelfToPool();
 public:
+	int32 GetPoolActivationCount() const { return PoolActivationCount; }
     // ===== Debug Visualization =====
     
 #if WITH_EDITORONLY_DATA

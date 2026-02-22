@@ -4,13 +4,16 @@
 #include "Components/StaticMeshComponent.h"
 #include "Logging/LogMacros.h"
 #include "ISMRuntimeComponent.h"
-
+#include "ISMRuntimePoolSubsystem.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "Kismet/GameplayStatics.h"
 #include "Feedbacks/ISMFeedbackSubsystem.h"
 #include "Feedbacks/ISMFeedbackContext.h"
 
 #include "DrawDebugHelpers.h"
+
+
+DEFINE_LOG_CATEGORY(LogISMRuntimePhysics);
 
 AISMPhysicsActor::AISMPhysicsActor()
 {
@@ -40,11 +43,32 @@ AISMPhysicsActor::AISMPhysicsActor()
 
 void AISMPhysicsActor::ApplyDMIToSlot_Implementation(int32 SlotIndex, UMaterialInstanceDynamic* DMI)
 {
-	UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::ApplyDMIToSlot - Slot: %d, DMI: %s"), SlotIndex, *GetNameSafe(DMI));
+    if (!DMI)
+    {
+        UE_LOG(LogISMRuntimePhysics, Warning, TEXT("ApplyDMIToSlot: null DMI for slot %d on %s — skipping"), SlotIndex, *GetName());
+        return;
+    }
+
+    // Guard whatever is on line 48 — likely a mesh component or material array access
+    UMeshComponent* Mesh = MeshComponent; // or however you get it
+    if (!Mesh)
+    {
+        UE_LOG(LogISMRuntimePhysics, Warning, TEXT("ApplyDMIToSlot: null mesh on %s — skipping slot %d"), *GetName(), SlotIndex);
+        return;
+    }
+    
+    if (SlotIndex >= Mesh->GetNumMaterials())
+    {
+        UE_LOG(LogISMRuntimePhysics, Warning, TEXT("ApplyDMIToSlot: slot %d out of range (%d slots) on %s"), SlotIndex, Mesh->GetNumMaterials(), *GetName());
+        return;
+    }
+
+	UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("AISMPhysicsActor::ApplyDMIToSlot - Slot: %d, DMI: %s"), SlotIndex, *GetNameSafe(DMI));
     if (MeshComponent && SlotIndex < MeshComponent->GetNumMaterials())
     {
         MeshComponent->SetMaterial(SlotIndex, DMI);
     }
+	
 }
 
 int32 AISMPhysicsActor::GetMaterialSlotCount_Implementation() const
@@ -107,7 +131,7 @@ void AISMPhysicsActor::Tick(float DeltaTime)
 
 void AISMPhysicsActor::OnPoolSpawned_Implementation()
 {
-    UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::OnPoolSpawned - %s"), *GetName());
+    UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("AISMPhysicsActor::OnPoolSpawned - %s"), *GetName());
     
     // One-time initialization when first added to pool
     ResetRuntimeState();
@@ -127,6 +151,8 @@ void AISMPhysicsActor::OnPoolSpawned_Implementation()
 
 void AISMPhysicsActor::OnRequestedFromPool_Implementation(UISMPoolDataAsset* DataAsset, const FISMInstanceHandle& InInstanceHandle)
 {
+    PoolActivationCount++; 
+
     UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::OnRequestedFromPool - %s"), *GetName());
     
     // Validate data asset
@@ -179,12 +205,12 @@ void AISMPhysicsActor::OnRequestedFromPool_Implementation(UISMPoolDataAsset* Dat
     // Play conversion sound
     PlayConversionFeedback();
     
-    UE_LOG(LogTemp, Log, TEXT("AISMPhysicsActor::OnRequestedFromPool - Actor configured and activated"));
+    UE_LOG(LogISMRuntimePhysics, Log, TEXT("AISMPhysicsActor::OnRequestedFromPool - Actor configured and activated"));
 }
 
 void AISMPhysicsActor::OnReturnedToPool_Implementation(FTransform& OutFinalTransform, bool& bUpdateInstanceTransform)
 {
-    UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::OnReturnedToPool - %s"), *GetName());
+    UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("AISMPhysicsActor::OnReturnedToPool - %s"), *GetName());
     
     // Capture final transform
     OutFinalTransform = GetActorTransform();
@@ -222,7 +248,7 @@ void AISMPhysicsActor::OnReturnedToPool_Implementation(FTransform& OutFinalTrans
 
 void AISMPhysicsActor::OnPoolDestroyed_Implementation()
 {
-    UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::OnPoolDestroyed - %s"), *GetName());
+    UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("AISMPhysicsActor::OnPoolDestroyed - %s"), *GetName());
     
     // Final cleanup before destruction
     // Nothing special needed - default cleanup is fine
@@ -299,7 +325,7 @@ void AISMPhysicsActor::ApplyPhysicsSettings(UISMPhysicsDataAsset* PhysicsDataAss
         //MeshComponent->BodyInstance.bOverrideCenterOfMass = false;
     }
     
-    UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::ApplyPhysicsSettings - Mass: %.2f, LinearDamping: %.2f, AngularDamping: %.2f"),
+    UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("AISMPhysicsActor::ApplyPhysicsSettings - Mass: %.2f, LinearDamping: %.2f, AngularDamping: %.2f"),
         PhysicsDataAsset->Mass, PhysicsDataAsset->LinearDamping, PhysicsDataAsset->AngularDamping);
 }
 
@@ -326,7 +352,7 @@ void AISMPhysicsActor::ApplyCollisionSettings(UISMPhysicsDataAsset* PhysicsDataA
 	MeshComponent->SetWalkableSlopeOverride(PhysicsDataAsset->WalkableSlopeOverride);
 	MeshComponent->SetNotifyRigidBodyCollision(PhysicsDataAsset->bIsDestructable);
     
-    UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::ApplyCollisionSettings - Preset: %s, PhysicsCollision: %s"),
+    UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("AISMPhysicsActor::ApplyCollisionSettings - Preset: %s, PhysicsCollision: %s"),
         *PhysicsDataAsset->CollisionPreset.ToString(), PhysicsDataAsset->bEnablePhysicsCollision ? TEXT("Enabled") : TEXT("Disabled"));
 }
 
@@ -346,7 +372,7 @@ void AISMPhysicsActor::ApplyVisualSettings(UISMPhysicsDataAsset* PhysicsDataAsse
 
 	MeshComponent->SetCastShadow(PhysicsDataAsset->bPhysicsActorCastShadows);
     
-    UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::ApplyVisualSettings - Scale: %.2f"),
+    UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("AISMPhysicsActor::ApplyVisualSettings - Scale: %.2f"),
         PhysicsDataAsset->ActorScaleMultiplier);
 }
 
@@ -358,6 +384,7 @@ bool AISMPhysicsActor::IsAtRest() const
 {
     if (!MeshComponent || !PhysicsData.IsValid())
     {
+		UE_LOG(LogISMRuntimePhysics, Warning, TEXT("AISMPhysicsActor::IsAtRest - Missing MeshComponent or PhysicsData!"));
         return false;
     }
 
@@ -371,6 +398,7 @@ bool AISMPhysicsActor::ShouldReturnToISM() const
 {
     if (!PhysicsData.IsValid())
     {
+		UE_LOG(LogISMRuntimePhysics, Warning, TEXT("AISMPhysicsActor::ShouldReturnToISM - No valid physics data!"));
         return false;
     }
 
@@ -397,13 +425,36 @@ void AISMPhysicsActor::ReturnToISM()
         return;
     }
 
+    // Check we are still the actor this handle was assigned to
+    if (InstanceHandle.CachedActorActivationCount != PoolActivationCount)
+    {
+        UE_LOG(LogISMRuntimePhysics, Warning, TEXT("[%s] ReturnToISM: stale activation count, ignoring"), *GetName());
+        ReturnSelfToPool();
+        return;
+    }
+
     UE_LOG(LogTemp, Verbose, TEXT("AISMPhysicsActor::ReturnToISM - Returning to ISM"));
 
     // Call the handle's return function
     // This will trigger OnReturnedToPool and handle pool return
     InstanceHandle.ReturnToISM(true, true); // Destroy actor=true, UpdateTransform=true
+
+    ReturnSelfToPool();
 }
 
+
+void AISMPhysicsActor::ReturnSelfToPool()
+{
+    if (UWorld* World = GetWorld())
+    {
+        if (UISMRuntimePoolSubsystem* Pool = World->GetSubsystem<UISMRuntimePoolSubsystem>())
+        {
+            FTransform FinalTransform;
+            bool bUpdateTransform = false;
+            Pool->ReturnActor(this, FinalTransform, bUpdateTransform);
+        }
+    }
+}
 #pragma endregion
 
 
@@ -618,12 +669,12 @@ void AISMPhysicsActor::DestroyLinkedISMInstance()
 
 
 void AISMPhysicsActor::SetInstanceHandle(const FISMInstanceHandle& Handle)
-
 {
     InstanceHandle = Handle;
-    InstanceHandle.SetConvertedActor(this);
+    InstanceHandle.SetConvertedActor(this, GetPoolActivationCount());
 	InstanceHandle.RefreshConvertedActorMaterials(GetWorld());
-    UE_LOG(LogTemp, Log, TEXT("PhysicsActor %s set instance handle: Component=%s, Index=%d"), *GetName(), *Handle.Component.Get()->GetName(), Handle.InstanceIndex);
+    const FString CompName = Handle.Component.IsValid() ? Handle.Component.Get()->GetName() : TEXT("NULL");
+    UE_LOG(LogTemp, Log, TEXT("PhysicsActor %s set instance handle: Component=%s, Index=%d"), *GetName(), *CompName, Handle.InstanceIndex);
 }
 
 

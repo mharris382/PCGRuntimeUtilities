@@ -570,6 +570,19 @@ void UISMRuntimeSubsystem::UpdateStatistics()
     StatsUpdateFrame = GFrameCounter;
 }
 
+UISMRuntimeComponent* UISMRuntimeSubsystem::FindComponentForISM(TWeakObjectPtr<UInstancedStaticMeshComponent> ISM) const
+{
+    if(!ISM.IsValid())
+        return nullptr;
+
+	if (const TWeakObjectPtr<UISMRuntimeComponent>* CompPtr = ISMToRuntimeComponentMap.Find(ISM.Get()))
+    {
+        return CompPtr->Get();
+    }
+    
+	return nullptr;
+}
+
 #pragma endregion
 
 

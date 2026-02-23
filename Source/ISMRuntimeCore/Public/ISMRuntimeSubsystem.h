@@ -142,6 +142,8 @@ public:
     /** Refresh statistics (called automatically each frame) */
     void UpdateStatistics();
     
+	UISMRuntimeComponent* FindComponentForISM(TWeakObjectPtr<UInstancedStaticMeshComponent> ISM) const;
+
 protected:
     // ===== Component Storage =====
     

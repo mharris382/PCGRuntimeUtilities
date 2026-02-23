@@ -6,6 +6,8 @@
 #include "ISMInstanceHandle.h"
 #include "ISMRuntimeComponent.h"
 //#include "Logging/LogMacros.h"
+#include "Components/SceneComponent.h"
+#include "Interfaces/ISMPickupInterface.h"
 #include "Interfaces/ISMPoolable.h"
 #include "GameplayTagAssetInterface.h"
 #include "CustomData/ISMCustomDataMaterialProvider.h"
@@ -51,6 +53,8 @@ class ISMRUNTIMEPHYSICS_API AISMPhysicsActor
     , public IISMPoolable
     , public IGameplayTagAssetInterface
     , public IISMCustomDataMaterialProvider
+    , public IISMPickupInterface
+ 
 {
     GENERATED_BODY()
 
@@ -117,9 +121,17 @@ public:
     virtual void OnPoolDestroyed_Implementation() override;
 
 
+    // ===== IISMPickupInterface =====
+
+    virtual void OnPickedUp_Implementation(const FISMPickupContext& Context) override;
+    virtual void OnDropped_Implementation(const FISMReleaseContext& Context) override;
+	virtual void OnThrown_Implementation(const FISMReleaseContext& Context) override;
+    virtual bool CanPickUp_Implementation(AActor* Instigator, USceneComponent* InstigatorComponent)  const override;
+
+	virtual FTransform GetHoldOffsetTransform_Implementation() const override { return FTransform::Identity; }
+	virtual FISMInstanceHandle GetSourceHandle_Implementation() const override { return InstanceHandle; }
 
     // ===== IGameplayTagAssetInterface =====
-
 public:
 
     /**

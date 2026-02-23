@@ -255,6 +255,32 @@ void AISMPhysicsActor::OnPoolDestroyed_Implementation()
     // Nothing special needed - default cleanup is fine
 }
 
+
+// ===== IISMPickupInterface =====
+
+void AISMPhysicsActor::OnPickedUp_Implementation(const FISMPickupContext& Context)
+{
+    // Stop physics simulation while held
+	StopSimulatingPhysics();
+}
+
+void AISMPhysicsActor::OnDropped_Implementation(const FISMReleaseContext& Context)
+{
+	StartSimulatingPhysics(Context.ReleaseVelocity, Context.ReleaseAngularVelocity);
+}
+
+void AISMPhysicsActor::OnThrown_Implementation(const FISMReleaseContext& Context)
+{
+	StartSimulatingPhysics(Context.ReleaseVelocity, Context.ReleaseAngularVelocity);
+}
+
+bool AISMPhysicsActor::CanPickUp_Implementation(AActor* InInstigator, USceneComponent* InstigatorComponent) const
+{
+    if (!InstigatorComponent || !InInstigator)
+        return false;
+    return PhysicsData.IsValid() ? PhysicsData->bAllowsPickup : false;
+}
+
 // ===== Physics Configuration =====
 
 void AISMPhysicsActor::ApplyPhysicsSettings(UISMPhysicsDataAsset* PhysicsDataAsset)

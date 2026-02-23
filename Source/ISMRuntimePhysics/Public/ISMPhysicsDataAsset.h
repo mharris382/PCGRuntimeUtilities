@@ -54,6 +54,11 @@ class ISMRUNTIMEPHYSICS_API UISMPhysicsDataAsset : public UISMPoolDataAsset
     GENERATED_BODY()
 
 public:
+
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core")
+	bool bAllowsPickup = false;
+
     // ===== Physics Properties =====
     
     /**

@@ -14,8 +14,11 @@ public class ISMRuntimeInteraction : ModuleRules
                 "Core",
                 "CoreUObject",
                 "Engine",
+                "GameplayTags",
                 "ISMRuntimeCore",
                 "ISMRuntimeSpatial",
+                "ISMRuntimePools",
+                "ISMRuntimePhysics"
             }
         );
 

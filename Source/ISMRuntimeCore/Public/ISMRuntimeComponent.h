@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "GameplayTagContainer.h"
 #include "ISMSpatialIndex.h"
 #include "Feedbacks/ISMFeedbackTags.h"
@@ -465,6 +466,15 @@ public:
     UPROPERTY(EditAnywhere, Category = "ISM Runtime|Performance", meta=(EditCondition="bEnableTickOptimization"))
     float TickInterval = 0.0f; // 0 = every frame
 
+
+    // ===== Redirectors =====
+
+    TArray<UPrimitiveComponent*> Redirectors;
+
+	void AddRedirector(UPrimitiveComponent* Component);
+
+	void RegisterAllRedirects();
+	void UnregisterAllRedirects();
 
     // ===== Accessors =====
 	bool IsISMInitialized() const { return bIsInitialized; }

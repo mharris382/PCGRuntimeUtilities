@@ -26,16 +26,19 @@ struct FISMMeshComponentMapping
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
     TSubclassOf<UISMRuntimeComponent> RuntimeComponentClass;
 
-    /** Optional: Override spatial index cell size for this mesh type */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime", meta = (ClampMin = "100.0"))
-    float OverrideCellSize = 0.0f; // 0 = use default
 
-
-
-	//Required Data Asset.  Also provide an array for convienience when setting up in the editor.  Multiple data assets can spawn the same RuntimeComponentClass
+    //Required Data Asset.  Also provide an array for convienience when setting up in the editor.  Multiple data assets can spawn the same RuntimeComponentClass
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
     class TArray<UISMInstanceDataAsset*> InstanceDataAssets;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
+    TArray<AActor*> RedirectorActors;
+
+
+
+    /** Optional: Override spatial index cell size for this mesh type */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime", meta = (ClampMin = "100.0"))
+    float OverrideCellSize = 0.0f; // 0 = use default
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime|Feedbacks", meta = (InlineEditConditionToggle))
     bool bSetComponentDefaultFeedbackTags = true;
@@ -91,6 +94,9 @@ public:
     TArray<AActor*> RuntimeComponentParents;
 
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
+    TArray<AActor*> RedirectorActors;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime", meta = (InlineEditConditionToggle))
     bool bSetActorDefaultFeedbackTags = true;
 
@@ -142,6 +148,9 @@ public:
 #if WITH_EDITOR
     virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
+
+
+	TArray<class UPrimitiveComponent*> GetAllRedirectorComponents(const FISMMeshComponentMapping* mapping) const;
 
     // ===== Runtime Component Management =====
 

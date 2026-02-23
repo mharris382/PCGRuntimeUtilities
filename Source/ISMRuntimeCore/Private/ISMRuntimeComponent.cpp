@@ -170,6 +170,54 @@ bool UISMRuntimeComponent::InitializeInstances()
     return true;
 }
 
+#pragma region REDIRECTS
+
+void UISMRuntimeComponent::AddRedirector(UPrimitiveComponent* Component)
+{
+    if (Component || Component && !Redirectors.Contains(Component))
+    {
+        Redirectors.Add(Component);
+        if (CachedSubsystem.IsValid())
+        {
+            CachedSubsystem->RegisterComponentRedirect(Component, this);
+        }
+    }
+}
+
+void UISMRuntimeComponent::RegisterAllRedirects()
+{
+    if (!CachedSubsystem.IsValid())
+    {
+        return;
+    }
+    for (UPrimitiveComponent* Redirector : Redirectors)
+    {
+        if (Redirector)
+        {
+            CachedSubsystem->RegisterComponentRedirect(Redirector, this);
+        }
+    }
+}
+
+void UISMRuntimeComponent::UnregisterAllRedirects()
+{
+    if (!CachedSubsystem.IsValid())
+    {
+        return;
+    }
+    for (UPrimitiveComponent* Redirector : Redirectors)
+    {
+        if (Redirector)
+        {
+            CachedSubsystem->UnregisterComponentRedirect(Redirector, this);
+        }
+    }
+}
+
+#pragma endregion
+
+
+
 void UISMRuntimeComponent::BuildComponentTags()
 {
     // Base implementation does nothing

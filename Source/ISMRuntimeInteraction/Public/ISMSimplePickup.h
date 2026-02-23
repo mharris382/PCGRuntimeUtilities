@@ -5,11 +5,14 @@
 #include "Components/SceneComponent.h"
 #include "GameplayTagContainer.h"
 #include "ISMInstanceHandle.h"
-#include "ISMPickupInterface.h"
+
+#include "Interfaces/ISMPickupInterface.h"
+#include "Delegates/DelegateCombinations.h"
 #include "ISMSimplePickup.generated.h"
 
 class UISMInteractionComponent;
 class UPhysicsHandleComponent;
+class AActor;
 
 // ---------------------------------------------------------------
 //  Minimal delegates — only what a simple pickup caller needs

@@ -5,11 +5,15 @@
 #include "GameplayTagContainer.h"
 #include "ISMInstanceHandle.h"
 #include "ISMQueryFilter.h"
+#include "CollisionQueryParams.h"
 #include "ISMRuntimeSubsystem.generated.h"
 
 // Forward declarations
 class UISMRuntimeComponent;
 class UISMBatchScheduler;
+
+
+
 
 /**
  * Statistics for runtime monitoring
@@ -34,6 +38,37 @@ struct FISMRuntimeStats
     UPROPERTY(BlueprintReadOnly, Category = "Stats")
     float LastFrameProcessingTimeMs = 0.0f;
 };
+
+
+USTRUCT(BlueprintType)
+struct FISMComponentMapping
+{
+    GENERATED_BODY()
+
+    /** The ISM component to manage */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
+    UInstancedStaticMeshComponent* ISMComponent = nullptr;
+
+    /** The runtime component class to use for this ISM */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
+    TSubclassOf<UISMRuntimeComponent> RuntimeComponentClass;
+
+    /** Optional: Override spatial index cell size for this component */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime", meta = (ClampMin = "100.0"))
+    float OverrideCellSize = 0.0f;
+
+    /**
+     * Primitive components that act as collision proxies for this ISM.
+     * Traces hitting any of these will redirect to this ISM for instance resolution.
+     * Use when the ISM itself has no per-instance collision — a single box collider
+     * representing a crate pile, a vehicle body containing ISM cargo, etc.
+     * Registered with the subsystem automatically on BeginPlay.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
+    TArray<UPrimitiveComponent*> CollisionProxies;
+};
+
+
 
 /**
  * World subsystem that coordinates all ISM runtime components.
@@ -178,6 +213,83 @@ protected:
      * Checks PendingRuntimeComponentCallbacks for this ISM and fires any waiting callbacks.
      */
     void FirePendingCallbacksForISM(UInstancedStaticMeshComponent* ISM,UISMRuntimeComponent* RuntimeComponent);
+
+
+    public:
+    // ===== Component Redirect Registry =====
+
+                  /**
+                  * Register a primitive component as a redirect source for one or more
+                  * ISM runtime components. When a trace hits this primitive, the subsystem
+                  * will resolve candidates from the registered ISM components instead.
+                  *
+                  * Use case: a single collision box representing a cluster of ISM instances,
+                  * a mesh collider for a foliage group, a vehicle body containing ISM cargo.
+                  * 
+				  * returns instance if registered successfully, or INDEX_NONE if the component is already registered as a redirect source
+                  */
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Redirect")
+    void RegisterComponentRedirect(
+        UPrimitiveComponent* PhysicsComponent,
+        UISMRuntimeComponent* ISMComponent);
+
+    /** Remove a specific ISM from a redirect source */
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Redirect")
+    void UnregisterComponentRedirect(
+        UPrimitiveComponent* PhysicsComponent,
+        UISMRuntimeComponent* ISMComponent);
+
+    /** Remove all redirects for a physics component */
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Redirect")
+    void UnregisterAllRedirectsForComponent(UPrimitiveComponent* PhysicsComponent);
+
+    private:
+    // Private — managed entirely through the register/unregister API
+    TMap<TWeakObjectPtr<UPrimitiveComponent>, TArray<TWeakObjectPtr<UISMRuntimeComponent>>> ComponentRedirectMap;
+
+#pragma region ISM_AWARE_TRACES
+     //          public:
+     //              // ===== ISM-Aware Traces =====
+     //
+     //          /**
+     //          * Line trace that resolves ISM instance handles directly.
+     //          * Falls back to component redirect map if the hit component
+     //          * is not an ISM but has been registered as a redirect source.
+     //          */
+     //              UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Trace")
+     //              bool LineTraceISM(const FVector& Start,
+     //                  const FVector& End,
+     //                  ECollisionChannel TraceChannel, FISMTraceResult& OutResult,
+     //                  const FISMQueryFilter& Filter,
+     //                  const FCollisionQueryParams& Params = FCollisionQueryParams::DefaultQueryParam) const;
+     //
+     //              /** Multi-trace variant — returns all hits sorted by distance */
+     //              UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Trace")
+     //              bool LineTraceISMMulti(
+     //                  const FVector& Start,
+     //                  const FVector& End,
+     //                  ECollisionChannel TraceChannel,
+     //                  TArray<FISMTraceResult>& OutResults,
+     //                  const FISMQueryFilter& Filter,
+     //                  const FCollisionQueryParams& Params = FCollisionQueryParams::DefaultQueryParam) const;
+     //
+     //              /** Sphere sweep variant */
+     //              UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Trace")
+     //              bool SweepISM(
+     //                  const FVector& Start,
+     //                  const FVector& End,
+     //                  float Radius,
+     //                  ECollisionChannel TraceChannel,
+     //                  FISMTraceResult& OutResult,
+     //                  const FISMQueryFilter& Filter,
+     //                  const FCollisionQueryParams& Params = FCollisionQueryParams::DefaultQueryParam) const;
+     //
+                    
+                  
+#pragma endregion
+
+
+                  
 };
 /*
 // Template implementation

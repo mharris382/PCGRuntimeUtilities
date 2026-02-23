@@ -660,3 +660,61 @@ void UISMRuntimeSubsystem::FirePendingCallbacksForISM(UInstancedStaticMeshCompon
         ISMToRuntimeComponentMap.Add(ISM, RuntimeComponent);
     }
 }
+
+/*
+
+bool UISMRuntimeSubsystem::LineTraceISM(const FVector& Start, const FVector& End, ECollisionChannel TraceChannel, FISMTraceResult& OutResult, const FISMQueryFilter& Filter, const FCollisionQueryParams& Params) const
+{
+    return false;
+}
+
+bool UISMRuntimeSubsystem::LineTraceISMMulti(const FVector& Start, const FVector& End, ECollisionChannel TraceChannel, TArray<FISMTraceResult>& OutResults, const FISMQueryFilter& Filter, const FCollisionQueryParams& Params) const
+{
+    return false;
+}
+
+bool UISMRuntimeSubsystem::SweepISM(const FVector& Start, const FVector& End, float Radius, ECollisionChannel TraceChannel, FISMTraceResult& OutResult, const FISMQueryFilter& Filter, const FCollisionQueryParams& Params) const
+{
+    return false;
+}*/
+
+
+#pragma region COMPONENT_REDIRECTS
+
+// ===== Component Redirect Registry =====
+
+void UISMRuntimeSubsystem::RegisterComponentRedirect(UPrimitiveComponent* PhysicsComponent, UISMRuntimeComponent* ISMComponent)
+{
+    if (!PhysicsComponent || !ISMComponent)
+        return;
+	ComponentRedirectMap.FindOrAdd(PhysicsComponent).AddUnique(ISMComponent);
+    UE_LOG(LogISMRuntimeCore, Verbose, TEXT("Registerd Component Redirect from %s to ISM Component %s"), *PhysicsComponent->GetName(), *ISMComponent->GetName())
+}
+
+void UISMRuntimeSubsystem::UnregisterComponentRedirect(UPrimitiveComponent* PhysicsComponent, UISMRuntimeComponent* ISMComponent)
+{
+    if (!PhysicsComponent || !ISMComponent)
+        return;
+	if (ComponentRedirectMap.Contains(PhysicsComponent))
+    {
+        TArray<TWeakObjectPtr<UISMRuntimeComponent>>& Redirects = ComponentRedirectMap[PhysicsComponent];
+        Redirects.RemoveAll([ISMComponent](const TWeakObjectPtr<UISMRuntimeComponent>& Comp)
+        {
+            return Comp.Get() == ISMComponent;
+        });
+        if(Redirects.Num() == 0)
+        {
+            ComponentRedirectMap.Remove(PhysicsComponent);
+        }
+    }
+}
+
+
+void UISMRuntimeSubsystem::UnregisterAllRedirectsForComponent(UPrimitiveComponent* PhysicsComponent)
+{
+    if (!PhysicsComponent)
+        return;
+	ComponentRedirectMap.Remove(PhysicsComponent);
+}
+
+#pragma endregion

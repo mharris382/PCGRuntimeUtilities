@@ -5,6 +5,8 @@
 #include "ISMRuntimeComponent.h"
 #include "ISMInstanceDataAsset.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/PrimitiveComponent.h"
+
 #include "Components/BoxComponent.h"
 #include "GameFramework/Actor.h"
 
@@ -72,6 +74,41 @@ FISMFeedbackTags AISMRuntimeActor::DefaultFeedbackTagsFor(UISMRuntimeComponent* 
 }
 
 
+namespace
+{
+	TArray< UPrimitiveComponent*> GetComponentsOnActor(AActor* actor)
+    {
+		if (!actor)return TArray< UPrimitiveComponent*>();
+        auto components = TArray< UPrimitiveComponent*>();
+        actor->GetComponents<UPrimitiveComponent>(components);
+        return components;
+    }
+}
+
+TArray< UPrimitiveComponent*> AISMRuntimeActor::GetAllRedirectorComponents(const FISMMeshComponentMapping* mapping) const
+{
+    auto redirects = TArray<class UPrimitiveComponent*>();
+    redirects.Reserve(mapping->RedirectorActors.Num());
+    TSet<AActor*> hits;
+    for(AActor* redirector : mapping->RedirectorActors)
+    {
+        if (!redirector || hits.Contains(redirector))
+            continue;
+        auto comps = GetComponentsOnActor(redirector);
+        redirects.Append(comps);
+		hits.Add(redirector);
+	}
+    for (AActor* redirector : RedirectorActors)
+    {
+        if (!redirector || hits.Contains(redirector))
+            continue;
+        auto comps = GetComponentsOnActor(redirector);
+        redirects.Append(comps);
+        hits.Add(redirector);
+    }
+	return redirects;
+}
+
 #if WITH_EDITOR
 void AISMRuntimeActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
@@ -84,6 +121,10 @@ void AISMRuntimeActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyCha
         // Mesh mappings changed - might want to refresh in editor
     }
 }
+
+
+
+
 #endif
 
 int32 AISMRuntimeActor::CreateRuntimeComponents()
@@ -325,7 +366,7 @@ TSubclassOf<UISMRuntimeComponent> AISMRuntimeActor::GetRuntimeComponentClassForI
 UISMRuntimeComponent* AISMRuntimeActor::CreateRuntimeComponentForISM(
     UInstancedStaticMeshComponent* ISMComponent,
     TSubclassOf<UISMRuntimeComponent> ComponentClass,
-    const FISMMeshComponentMapping* MeshMapping, 
+    const FISMMeshComponentMapping* MeshMapping,
     const int DataInstanceIndex)
 {
     if (!ISMComponent || !ComponentClass)
@@ -335,7 +376,7 @@ UISMRuntimeComponent* AISMRuntimeActor::CreateRuntimeComponentForISM(
     FName CompName = MakeUniqueObjectName(this, ComponentClass,
         FName(*FString::Printf(TEXT("RuntimeComp_%s"), *ISMComponent->GetName())));
 
-	AActor* ISMOwner = ISMComponent->GetOwner(); 
+    AActor* ISMOwner = ISMComponent->GetOwner();
     // Create the component
     UISMRuntimeComponent* RuntimeComp = NewObject<UISMRuntimeComponent>(
         ISMOwner,          // or should this actor be the owner of the runtime component, regardless of where the ISM is?
@@ -343,6 +384,8 @@ UISMRuntimeComponent* AISMRuntimeActor::CreateRuntimeComponentForISM(
         CompName,
         RF_Transient
     );
+
+   
 
     if (!RuntimeComp)
     {
@@ -352,7 +395,12 @@ UISMRuntimeComponent* AISMRuntimeActor::CreateRuntimeComponentForISM(
 
     // Configure the component
     RuntimeComp->ManagedISMComponent = ISMComponent;
-
+    
+    TArray<UPrimitiveComponent*> Redirectors = GetAllRedirectorComponents(MeshMapping);
+    for (UPrimitiveComponent* prim : Redirectors)
+    {
+		RuntimeComp->AddRedirector(prim);
+    }
 
     // Assign Feedbacks from Actor
 	FISMFeedbackTags t = DefaultFeedbackTagsFor(RuntimeComp, *MeshMapping);

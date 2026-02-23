@@ -30,6 +30,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogISMTrace, Log, All);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInstanceStateChanged, class UISMRuntimeComponent*, Component, int32, InstanceIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInstanceDestroyed, class UISMRuntimeComponent*, Component, int32, InstanceIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInstanceTagsChanged, class UISMRuntimeComponent*, Component, int32, InstanceIndex);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnInstanceTagsChangedNative, class UISMRuntimeComponent*, int32);
 
 //DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnReleaseConvertedActor, class UISMRuntimeComponent*, Component, int32, InstanceIndex, AActor*, ReleasedActor);
 //DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnInstanceConverted, class UISMRuntimeComponent*, Component, int32, InstanceIndex, AActor*, ConvertedActor);
@@ -44,7 +45,13 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInstanceReleased, class UISMRunt
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnInstanceStateChangedNative, class UISMRuntimeComponent*, int32);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnInstanceDestroyedNative, class UISMRuntimeComponent*, int32);
 
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnInstanceOwnerChangedNative, class UISMRuntimeComponent*, int32);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnInstancePossessionChangedNative, class UISMRuntimeComponent*, int32);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnInstanceAttachmentChangedNative, class UISMRuntimeComponent*, int32);
 /**
+* 
+* 
+* 
  * Base component for managing ISM instances at runtime with gameplay features.
  * Provides spatial indexing, state tracking, tagging, and event system.
  * 
@@ -428,6 +435,7 @@ public:
     /** Called when instance tags change */
     UPROPERTY(BlueprintAssignable, Category = "ISM Runtime|Events")
     FOnInstanceTagsChanged OnInstanceTagsChanged;
+    FOnInstanceTagsChangedNative OnInstanceTagsChangedNative;
 
     /** Native C++ delegates (no Blueprint overhead) */
     FOnInstanceStateChangedNative OnInstanceStateChangedNative;
@@ -445,12 +453,15 @@ public:
 
     UPROPERTY(BlueprintAssignable, Category = "ISM Runtime|Events")
 	FOnInstanceOwnerChanged OnInstanceOwnerChanged;
+    FOnInstanceOwnerChangedNative OnInstanceOwnerChangedNative;
 
     UPROPERTY(BlueprintAssignable, Category = "ISM Runtime|Events")
 	FOnInstancePossessionChanged OnInstancePossessionChanged;
+    FOnInstancePossessionChangedNative OnInstancePossessionChangedNative;
 
     UPROPERTY(BlueprintAssignable, Category = "ISM Runtime|Events")
 	FOnInstanceAttachmentChanged OnInstanceAttachmentChanged;
+    FOnInstanceAttachmentChangedNative OnInstanceAttachmentChangedNative;
 
     UPROPERTY(BlueprintAssignable, Category = "ISM Runtime|Events")
 	FOnInstanceReleased OnInstanceReleased;

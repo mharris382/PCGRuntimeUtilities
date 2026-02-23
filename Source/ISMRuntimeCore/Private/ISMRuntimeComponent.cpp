@@ -1592,6 +1592,7 @@ void UISMRuntimeComponent::BroadcastTagChange(int32 InstanceIndex)
         return;
     }
     OnInstanceTagsChanged.Broadcast(this, InstanceIndex);
+    OnInstanceTagsChangedNative.Broadcast(this, InstanceIndex);
 }
 
 void UISMRuntimeComponent::BroadcastOwnershipChange(int32 InstanceIndex)
@@ -1601,6 +1602,7 @@ void UISMRuntimeComponent::BroadcastOwnershipChange(int32 InstanceIndex)
     }
 	FISMInstanceHandle Handle = GetInstanceHandle(InstanceIndex);
     OnInstanceOwnerChanged.Broadcast(this, InstanceIndex, Handle.GetOwnerTag());
+    OnInstanceOwnerChangedNative.Broadcast(this, InstanceIndex);
 }
 
 void UISMRuntimeComponent::BroadcastPossessionChange(int32 InstanceIndex)
@@ -1610,6 +1612,7 @@ void UISMRuntimeComponent::BroadcastPossessionChange(int32 InstanceIndex)
     }
     FISMInstanceHandle Handle = GetInstanceHandle(InstanceIndex);
     OnInstancePossessionChanged.Broadcast(this, InstanceIndex, Handle.GetPossessorTag(), Handle.GetPossessorActor());
+    OnInstancePossessionChangedNative.Broadcast(this, InstanceIndex);
 }
 
 void UISMRuntimeComponent::BroadcastAttachmentChange(int32 InstanceIndex)
@@ -1619,10 +1622,15 @@ void UISMRuntimeComponent::BroadcastAttachmentChange(int32 InstanceIndex)
     }
     FISMInstanceHandle Handle = GetInstanceHandle(InstanceIndex);
 	OnInstanceAttachmentChanged.Broadcast(this, InstanceIndex, Handle.GetAttachParent(), Handle.GetAttachSocket());
+    OnInstanceAttachmentChangedNative.Broadcast(this, InstanceIndex);
 }
 
 void UISMRuntimeComponent::BroadcastInstanceReleased(int32 InstanceIndex)
 {
+    if (!IsValidInstanceIndex(InstanceIndex)) {
+        return;
+    }
+	OnInstanceReleased.Broadcast(this, InstanceIndex);
 }
 
 void UISMRuntimeComponent::OnInstancePreDestroy(int32 InstanceIndex)

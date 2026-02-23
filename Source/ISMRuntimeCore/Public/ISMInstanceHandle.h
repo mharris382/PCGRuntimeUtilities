@@ -80,7 +80,8 @@ struct ISMRUNTIMECORE_API FISMInstanceHandle
     /** Transform cached at conversion time, used to restore ISM position on return. */
     FTransform CachedPreConversionTransform;
 
-
+    FGameplayTag PreviousOwnerTag;
+	FGameplayTag PreviousPossessorTag;
 
     FISMInstanceHandle() = default;
 

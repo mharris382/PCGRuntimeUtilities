@@ -418,7 +418,7 @@ void FISMInstanceHandle::SetOwner(FGameplayTag InOwnerTag)
     {
         return;
     }
-
+    if (OwnerTag.IsValid()) PreviousOwnerTag = OwnerTag;
     OwnerTag = InOwnerTag;
     OwnershipState |= static_cast<uint8>(EISMInstanceOwnershipState::Owned);
     if (Component.IsValid())Component->BroadcastOwnershipChange(InstanceIndex);
@@ -437,7 +437,8 @@ void FISMInstanceHandle::SetPossessor(FGameplayTag InPossessorTag, AActor* Posse
     {
         return;
     }
-
+    if (PossessorTag.IsValid())
+        PreviousPossessorTag = PossessorTag;
     PossessorTag = InPossessorTag;
     CachedPossessorActor = PossessorActor; // nullptr is fine — tag is the authority
     OwnershipState |= static_cast<uint8>(EISMInstanceOwnershipState::Possessed);
@@ -462,6 +463,8 @@ void FISMInstanceHandle::CachePossessorActor(AActor* Actor)
 
 void FISMInstanceHandle::ClearPossessor()
 {
+	if (PossessorTag.IsValid())
+	    PreviousPossessorTag = PossessorTag;
     PossessorTag = FGameplayTag();
     CachedPossessorActor = nullptr;
     OwnershipState &= ~static_cast<uint8>(EISMInstanceOwnershipState::Possessed);

@@ -5,6 +5,7 @@
 #include "ISMRuntimeComponent.h"
 #include "ISMInstanceHandle.h"
 #include "ISMInstanceState.h"
+#include "CollisionQueryParams.h"
 #include "Batching/ISMBatchScheduler.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "ISMQueryFilter.h"
@@ -661,60 +662,379 @@ void UISMRuntimeSubsystem::FirePendingCallbacksForISM(UInstancedStaticMeshCompon
     }
 }
 
-/*
-
-bool UISMRuntimeSubsystem::LineTraceISM(const FVector& Start, const FVector& End, ECollisionChannel TraceChannel, FISMTraceResult& OutResult, const FISMQueryFilter& Filter, const FCollisionQueryParams& Params) const
-{
-    return false;
-}
-
-bool UISMRuntimeSubsystem::LineTraceISMMulti(const FVector& Start, const FVector& End, ECollisionChannel TraceChannel, TArray<FISMTraceResult>& OutResults, const FISMQueryFilter& Filter, const FCollisionQueryParams& Params) const
-{
-    return false;
-}
-
-bool UISMRuntimeSubsystem::SweepISM(const FVector& Start, const FVector& End, float Radius, ECollisionChannel TraceChannel, FISMTraceResult& OutResult, const FISMQueryFilter& Filter, const FCollisionQueryParams& Params) const
-{
-    return false;
-}*/
-
-
-#pragma region COMPONENT_REDIRECTS
-
-// ===== Component Redirect Registry =====
-
-void UISMRuntimeSubsystem::RegisterComponentRedirect(UPrimitiveComponent* PhysicsComponent, UISMRuntimeComponent* ISMComponent)
+void UISMRuntimeSubsystem::RegisterComponentRedirect(
+    UPrimitiveComponent* PhysicsComponent,
+    UISMRuntimeComponent* ISMComponent)
 {
     if (!PhysicsComponent || !ISMComponent)
-        return;
-	ComponentRedirectMap.FindOrAdd(PhysicsComponent).AddUnique(ISMComponent);
-    UE_LOG(LogISMRuntimeCore, Verbose, TEXT("Registerd Component Redirect from %s to ISM Component %s"), *PhysicsComponent->GetName(), *ISMComponent->GetName())
-}
-
-void UISMRuntimeSubsystem::UnregisterComponentRedirect(UPrimitiveComponent* PhysicsComponent, UISMRuntimeComponent* ISMComponent)
-{
-    if (!PhysicsComponent || !ISMComponent)
-        return;
-	if (ComponentRedirectMap.Contains(PhysicsComponent))
     {
-        TArray<TWeakObjectPtr<UISMRuntimeComponent>>& Redirects = ComponentRedirectMap[PhysicsComponent];
-        Redirects.RemoveAll([ISMComponent](const TWeakObjectPtr<UISMRuntimeComponent>& Comp)
+        UE_LOG(LogISMTrace, Warning,
+            TEXT("RegisterComponentRedirect: null argument — skipping"));
+        return;
+    }
+
+    TArray<TWeakObjectPtr<UISMRuntimeComponent>>& Entry =
+        ComponentRedirectMap.FindOrAdd(PhysicsComponent);
+
+    // Avoid duplicates
+    for (const TWeakObjectPtr<UISMRuntimeComponent>& Existing : Entry)
+    {
+        if (Existing.Get() == ISMComponent) return;
+    }
+
+    Entry.Add(ISMComponent);
+
+    UE_LOG(LogISMTrace, Verbose,
+        TEXT("RegisterComponentRedirect: %s → %s"),
+        *PhysicsComponent->GetName(), *ISMComponent->GetName());
+}
+
+void UISMRuntimeSubsystem::UnregisterComponentRedirect(
+    UPrimitiveComponent* PhysicsComponent,
+    UISMRuntimeComponent* ISMComponent)
+{
+    if (!PhysicsComponent || !ISMComponent) return;
+
+    TArray<TWeakObjectPtr<UISMRuntimeComponent>>* Entry =
+        ComponentRedirectMap.Find(PhysicsComponent);
+
+    if (!Entry) return;
+
+    Entry->RemoveAll([ISMComponent](const TWeakObjectPtr<UISMRuntimeComponent>& Ptr)
         {
-            return Comp.Get() == ISMComponent;
+            return Ptr.Get() == ISMComponent;
         });
-        if(Redirects.Num() == 0)
+
+    if (Entry->IsEmpty())
+    {
+        ComponentRedirectMap.Remove(PhysicsComponent);
+    }
+}
+
+void UISMRuntimeSubsystem::UnregisterAllRedirectsForComponent(
+    UPrimitiveComponent* PhysicsComponent)
+{
+    if (!PhysicsComponent) return;
+    ComponentRedirectMap.Remove(PhysicsComponent);
+}
+
+void UISMRuntimeSubsystem::CleanupRedirectMap()
+{
+    // Remove entries where the proxy component has been destroyed
+    for (auto It = ComponentRedirectMap.CreateIterator(); It; ++It)
+    {
+        if (!It.Key().IsValid())
         {
-            ComponentRedirectMap.Remove(PhysicsComponent);
+            It.RemoveCurrent();
+            continue;
+        }
+
+        // Remove stale ISM component refs within each entry
+        It.Value().RemoveAll([](const TWeakObjectPtr<UISMRuntimeComponent>& Ptr)
+            {
+                return !Ptr.IsValid();
+            });
+
+        if (It.Value().IsEmpty())
+        {
+            It.RemoveCurrent();
+        }
+    }
+
+    // Remove stale entries from ISMToRuntimeMap
+    for (auto It = ISMToRuntimeComponentMap.CreateIterator(); It; ++It)
+    {
+        if (!It.Key().IsValid() || !It.Value().IsValid())
+        {
+            It.RemoveCurrent();
         }
     }
 }
 
+// ============================================================
+//  Core Resolution Logic
+// ============================================================
 
-void UISMRuntimeSubsystem::UnregisterAllRedirectsForComponent(UPrimitiveComponent* PhysicsComponent)
+FISMTraceResult UISMRuntimeSubsystem::ResolveHitToISMHandle(
+    const FHitResult& Hit,
+    const FISMQueryFilter& Filter,
+    float RedirectSearchRadius) const
 {
-    if (!PhysicsComponent)
-        return;
-	ComponentRedirectMap.Remove(PhysicsComponent);
+    FISMTraceResult Result;
+    Result.PhysicsHit = Hit;
+
+    if (!Hit.Component.IsValid()) return Result;
+
+    // -------------------------------------------------------
+    // Path A: Direct ISM hit
+    // -------------------------------------------------------
+    if (UInstancedStaticMeshComponent* HitISM =
+        Cast<UInstancedStaticMeshComponent>(Hit.Component.Get()))
+    {
+        if (Hit.Item == INDEX_NONE)
+        {
+            UE_LOG(LogISMTrace, Verbose,
+                TEXT("ResolveHit: hit ISM %s but Item is INDEX_NONE"),
+                *HitISM->GetName());
+            return Result;
+        }
+
+        UISMRuntimeComponent* OwningRuntime = FindComponentForISM(HitISM);
+        if (!OwningRuntime)
+        {
+            UE_LOG(LogISMTrace, Verbose,
+                TEXT("ResolveHit: ISM %s not managed by any runtime component"),
+                *HitISM->GetName());
+            return Result;
+        }
+
+        // Apply component-level filter before instance-level
+        if (!Filter.PassesComponentFilter(OwningRuntime))
+        {
+            return Result;
+        }
+
+        FISMInstanceHandle Candidate = OwningRuntime->GetInstanceHandle(Hit.Item);
+        if (!Candidate.IsValid())
+        {
+            return Result;
+        }
+
+        if (!Filter.PassesFilter(Candidate))
+        {
+            return Result;
+        }
+
+        Result.Handle = Candidate;
+        Result.ResolveMethod = EISMTraceResolveMethod::Direct;
+        Result.InstanceDistance = Hit.Distance;
+        return Result;
+    }
+
+    // -------------------------------------------------------
+    // Path B: Redirect via proxy component
+    // -------------------------------------------------------
+    UPrimitiveComponent* HitPrimitive =
+        Cast<UPrimitiveComponent>(Hit.Component.Get());
+
+    if (!HitPrimitive) return Result;
+
+    const TArray<TWeakObjectPtr<UISMRuntimeComponent>>* RedirectTargets =
+        ComponentRedirectMap.Find(TWeakObjectPtr<UPrimitiveComponent>(HitPrimitive));
+
+    if (!RedirectTargets || RedirectTargets->IsEmpty())
+    {
+        UE_LOG(LogISMTrace, Verbose,
+            TEXT("ResolveHit: hit %s — no redirect registered"),
+            *HitPrimitive->GetName());
+        return Result;
+    }
+
+    return ResolveRedirectHit(Hit, *RedirectTargets, Filter, RedirectSearchRadius);
 }
+
+FISMTraceResult UISMRuntimeSubsystem::ResolveRedirectHit(
+    const FHitResult& Hit,
+    const TArray<TWeakObjectPtr<UISMRuntimeComponent>>& Candidates,
+    const FISMQueryFilter& Filter,
+    float RedirectSearchRadius) const
+{
+    FISMTraceResult Result;
+    Result.PhysicsHit = Hit;
+    Result.ResolveMethod = EISMTraceResolveMethod::Redirect;
+
+    const FVector ImpactPoint = Hit.ImpactPoint;
+    float BestDistSq = FLT_MAX;
+
+    for (const TWeakObjectPtr<UISMRuntimeComponent>& CompPtr : Candidates)
+    {
+        UISMRuntimeComponent* Comp = CompPtr.Get();
+        if (!Comp) continue;
+
+        if (!Filter.PassesComponentFilter(Comp)) continue;
+
+        // Use AABB overlap if available, otherwise fall back to center-point radius query
+        TArray<int32> NearbyInstances;
+
+        if (Comp->bComputeInstanceAABBs)
+        {
+            // Expand the search box by the redirect radius around the impact point
+            const FBox SearchBox = FBox::BuildAABB(ImpactPoint,
+                FVector(RedirectSearchRadius));
+            NearbyInstances = Comp->GetInstancesOverlappingBox(SearchBox, false);
+        }
+        else
+        {
+            NearbyInstances = Comp->GetInstancesInRadius(
+                ImpactPoint, RedirectSearchRadius, false);
+        }
+
+        for (int32 InstanceIndex : NearbyInstances)
+        {
+            FISMInstanceHandle Candidate = Comp->GetInstanceHandle(InstanceIndex);
+            if (!Candidate.IsValid()) continue;
+            if (!Filter.PassesFilter(Candidate)) continue;
+
+            const float DistSq = FVector::DistSquared(
+                ImpactPoint, Comp->GetInstanceLocation(InstanceIndex));
+
+            if (DistSq < BestDistSq)
+            {
+                BestDistSq = DistSq;
+                Result.Handle = Candidate;
+                Result.InstanceDistance = FMath::Sqrt(DistSq);
+            }
+        }
+    }
+
+    if (!Result.Handle.IsValid())
+    {
+        UE_LOG(LogISMTrace, Verbose,
+            TEXT("ResolveRedirectHit: impact point (%.0f, %.0f, %.0f) — "
+                "no candidates within radius %.0f"),
+            ImpactPoint.X, ImpactPoint.Y, ImpactPoint.Z, RedirectSearchRadius);
+    }
+
+    return Result;
+}
+
+// ============================================================
+//  LineTraceISM
+// ============================================================
+
+bool UISMRuntimeSubsystem::LineTraceISM(
+    const FVector& Start,
+    const FVector& End,
+    ECollisionChannel TraceChannel,
+    FISMTraceResult& OutResult,
+    const FISMQueryFilter& Filter,
+    const FCollisionQueryParams& Params,
+    float RedirectSearchRadius) const
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        UE_LOG(LogISMRuntimeCore, Warning, TEXT("LineTraceISM: no world"));
+        return false;
+    }
+
+    FHitResult Hit;
+    if (!World->LineTraceSingleByChannel(Hit, Start, End, TraceChannel, Params))
+    {
+        return false;
+    }
+
+    OutResult = ResolveHitToISMHandle(Hit, Filter, RedirectSearchRadius);
+    return OutResult.IsValid();
+}
+
+// ============================================================
+//  LineTraceISMMulti
+// ============================================================
+
+bool UISMRuntimeSubsystem::LineTraceISMMulti(
+    const FVector& Start,
+    const FVector& End,
+    ECollisionChannel TraceChannel,
+    TArray<FISMTraceResult>& OutResults,
+    const FISMQueryFilter& Filter,
+    const FCollisionQueryParams& Params,
+    float RedirectSearchRadius) const
+{
+    UWorld* World = GetWorld();
+    if (!World) return false;
+
+    TArray<FHitResult> Hits;
+    if (!World->LineTraceMultiByChannel(Hits, Start, End, TraceChannel, Params))
+    {
+        return false;
+    }
+
+    OutResults.Reset();
+
+    for (const FHitResult& Hit : Hits)
+    {
+        FISMTraceResult Resolved = ResolveHitToISMHandle(Hit, Filter, RedirectSearchRadius);
+        if (Resolved.IsValid())
+        {
+            OutResults.Add(Resolved);
+        }
+    }
+
+    // Sort nearest-first by instance distance
+    OutResults.Sort([](const FISMTraceResult& A, const FISMTraceResult& B)
+        {
+            return A.InstanceDistance < B.InstanceDistance;
+        });
+
+    return !OutResults.IsEmpty();
+}
+
+// ============================================================
+//  SweepISM
+// ============================================================
+
+bool UISMRuntimeSubsystem::SweepISM(
+    const FVector& Start,
+    const FVector& End,
+    float SweepRadius,
+    ECollisionChannel TraceChannel,
+    FISMTraceResult& OutResult,
+    const FISMQueryFilter& Filter,
+    const FCollisionQueryParams& Params,
+    float RedirectSearchRadius) const
+{
+    UWorld* World = GetWorld();
+    if (!World) return false;
+
+    FHitResult Hit;
+    const FCollisionShape Sphere = FCollisionShape::MakeSphere(SweepRadius);
+
+    if (!World->SweepSingleByChannel(Hit, Start, End,
+        FQuat::Identity, TraceChannel, Sphere, Params))
+    {
+        return false;
+    }
+
+    OutResult = ResolveHitToISMHandle(Hit, Filter, RedirectSearchRadius);
+    return OutResult.IsValid();
+}
+
+bool UISMRuntimeSubsystem::LineTraceISM(const FVector& Start, const FVector& End, ECollisionChannel TraceChannel, FISMTraceResult& OutResult, const FISMQueryFilter& Filter, float RedirectSearchRadius) const
+{
+    return LineTraceISM(Start, End, TraceChannel, OutResult, Filter, FCollisionQueryParams::DefaultQueryParam, RedirectSearchRadius);
+}
+
+bool UISMRuntimeSubsystem::LineTraceISMMulti(const FVector& Start, const FVector& End, ECollisionChannel TraceChannel, TArray<FISMTraceResult>& OutResults, const FISMQueryFilter& Filter, float RedirectSearchRadius) const
+{
+    return LineTraceISMMulti(Start, End, TraceChannel, OutResults, Filter, FCollisionQueryParams::DefaultQueryParam, RedirectSearchRadius);
+}
+
+bool UISMRuntimeSubsystem::SweepISM(const FVector& Start, const FVector& End, float Radius, ECollisionChannel TraceChannel, FISMTraceResult& OutResult, const FISMQueryFilter& Filter, float RedirectSearchRadius) const
+{
+    return SweepISM(Start, End, Radius, TraceChannel, OutResult, Filter, FCollisionQueryParams::DefaultQueryParam, RedirectSearchRadius);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #pragma endregion

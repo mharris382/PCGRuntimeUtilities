@@ -22,7 +22,8 @@ struct FISMFeedbackParticipant;
 
 // Declares a log category symbol other .cpp files can reference
 DECLARE_LOG_CATEGORY_EXTERN(LogISMRuntimeCore, Log, All);
-
+DECLARE_LOG_CATEGORY_EXTERN(LogISMTrace, Log, All);
+//LogISMTrace
 /**
  * Delegate signatures for instance events
  */

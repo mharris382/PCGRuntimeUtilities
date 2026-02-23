@@ -14,6 +14,8 @@
 #include "Engine/World.h"
 
 DEFINE_LOG_CATEGORY(LogISMRuntimeCore);
+DEFINE_LOG_CATEGORY(LogISMTrace);
+
 
 UISMRuntimeComponent::UISMRuntimeComponent()
 {

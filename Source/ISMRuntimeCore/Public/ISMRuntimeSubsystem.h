@@ -6,11 +6,13 @@
 #include "ISMInstanceHandle.h"
 #include "ISMQueryFilter.h"
 #include "CollisionQueryParams.h"
+#include "ISMTraceResult.h"
 #include "ISMRuntimeSubsystem.generated.h"
 
 // Forward declarations
 class UISMRuntimeComponent;
 class UISMBatchScheduler;
+
 
 
 
@@ -248,44 +250,105 @@ protected:
     TMap<TWeakObjectPtr<UPrimitiveComponent>, TArray<TWeakObjectPtr<UISMRuntimeComponent>>> ComponentRedirectMap;
 
 #pragma region ISM_AWARE_TRACES
-     //          public:
-     //              // ===== ISM-Aware Traces =====
-     //
-     //          /**
-     //          * Line trace that resolves ISM instance handles directly.
-     //          * Falls back to component redirect map if the hit component
-     //          * is not an ISM but has been registered as a redirect source.
-     //          */
-     //              UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Trace")
-     //              bool LineTraceISM(const FVector& Start,
-     //                  const FVector& End,
-     //                  ECollisionChannel TraceChannel, FISMTraceResult& OutResult,
-     //                  const FISMQueryFilter& Filter,
-     //                  const FCollisionQueryParams& Params = FCollisionQueryParams::DefaultQueryParam) const;
-     //
-     //              /** Multi-trace variant — returns all hits sorted by distance */
-     //              UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Trace")
-     //              bool LineTraceISMMulti(
-     //                  const FVector& Start,
-     //                  const FVector& End,
-     //                  ECollisionChannel TraceChannel,
-     //                  TArray<FISMTraceResult>& OutResults,
-     //                  const FISMQueryFilter& Filter,
-     //                  const FCollisionQueryParams& Params = FCollisionQueryParams::DefaultQueryParam) const;
-     //
-     //              /** Sphere sweep variant */
-     //              UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Trace")
-     //              bool SweepISM(
-     //                  const FVector& Start,
-     //                  const FVector& End,
-     //                  float Radius,
-     //                  ECollisionChannel TraceChannel,
-     //                  FISMTraceResult& OutResult,
-     //                  const FISMQueryFilter& Filter,
-     //                  const FCollisionQueryParams& Params = FCollisionQueryParams::DefaultQueryParam) const;
-     //
+               public:
+                   // ===== ISM-Aware Traces =====
+     
+               /**
+               * Line trace that resolves ISM instance handles directly.
+               * Falls back to component redirect map if the hit component
+               * is not an ISM but has been registered as a redirect source.
+               */
+                   bool LineTraceISM(const FVector& Start,
+                       const FVector& End,
+                       ECollisionChannel TraceChannel, 
+                       FISMTraceResult& OutResult,
+                       const FISMQueryFilter& Filter,
+                       const FCollisionQueryParams& Params,
+                       float RedirectSearchRadius) const;
+                   
+                   ///** Multi-trace variant — returns all hits sorted by distance */
+                   bool LineTraceISMMulti(
+                       const FVector& Start,
+                       const FVector& End,
+                       ECollisionChannel TraceChannel,
+                       TArray<FISMTraceResult>& OutResults,
+                       const FISMQueryFilter& Filter,
+                       const FCollisionQueryParams& Params,
+                       float RedirectSearchRadius) const;
+     
+                   /** Sphere sweep variant */
+                   bool SweepISM(const FVector& Start,const FVector& End,float Radius, ECollisionChannel TraceChannel, struct FISMTraceResult& OutResult, const FISMQueryFilter& Filter,
+                       const FCollisionQueryParams& Params,
+                       float RedirectSearchRadius) const;
+     
+                   UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Trace")
+                   bool LineTraceISM(const FVector& Start,
+                       const FVector& End,
+                       ECollisionChannel TraceChannel,
+                       FISMTraceResult& OutResult,
+                       const FISMQueryFilter& Filter,
+                       float RedirectSearchRadius) const;
+
+                   ///** Multi-trace variant — returns all hits sorted by distance */
+                   UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Trace")
+                   bool LineTraceISMMulti(
+                       const FVector& Start,
+                       const FVector& End,
+                       ECollisionChannel TraceChannel,
+                       TArray<FISMTraceResult>& OutResults,
+                       const FISMQueryFilter& Filter,
+                       float RedirectSearchRadius) const;
+
+                   /** Sphere sweep variant */
+                   UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Trace")
+                   bool SweepISM(const FVector& Start, const FVector& End, float Radius, ECollisionChannel TraceChannel, struct FISMTraceResult& OutResult, const FISMQueryFilter& Filter,
+                       float RedirectSearchRadius) const;
                     
+              protected:
                   
+                  /**
+                   * Resolve a physics hit result to an ISM instance handle.
+                   * Tries direct resolution first, then redirect lookup.
+                   * Returns invalid handle if neither succeeds.
+                   */
+                  FISMTraceResult ResolveHitToISMHandle(
+                      const FHitResult& Hit,
+                      const FISMQueryFilter& Filter,
+                      float RedirectSearchRadius) const;
+
+                  /**
+                   * Resolve redirect: given a hit on a proxy component, find the nearest
+                   * ISM instance within RedirectSearchRadius of the impact point.
+                   */
+                  FISMTraceResult ResolveRedirectHit(
+                      const FHitResult& Hit,
+                      const TArray<TWeakObjectPtr<UISMRuntimeComponent>>& Candidates,
+                      const FISMQueryFilter& Filter,
+                      float RedirectSearchRadius) const;
+
+                  /** Prune stale entries from ComponentRedirectMap and ISMToRuntimeMap */
+                  void CleanupRedirectMap();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #pragma endregion
 
 

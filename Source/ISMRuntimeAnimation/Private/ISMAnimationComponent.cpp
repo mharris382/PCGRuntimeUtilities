@@ -63,7 +63,7 @@ void UISMAnimationComponent::EndPlay(const EEndPlayReason::Type EndReason)
    // tick a dangling pointer.
 	if (Transformer.IsValid())
 	{
-		if (UISMBatchScheduler* Scheduler = CachedScheduler.Get())
+		if (UISMBatchSchedulerBase* Scheduler = CachedScheduler.Get())
 		{
 			Scheduler->UnregisterTransformer(Transformer->GetTransformerName());
 		}
@@ -134,7 +134,7 @@ void UISMAnimationComponent::OnRuntimeComponentReady(UISMRuntimeComponent* Runti
 		return;
 	}
 	UE_LOG(LogISMRuntimeAnimation, Log, TEXT("UISMAnimationComponent on '%s': runtime component ready, creating transformer."), *GetOwner()->GetName());
-	UISMBatchScheduler* Scheduler = CachedScheduler.Get();
+	UISMBatchSchedulerBase* Scheduler = CachedScheduler.Get();
 	if (!Scheduler)
 	{
 		UE_LOG(LogISMRuntimeAnimation, Warning, TEXT("UISMAnimationComponent on '%s': scheduler no longer valid. Animation will not run."), *GetOwner()->GetName());

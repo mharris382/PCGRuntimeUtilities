@@ -3,13 +3,15 @@
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
 #include "Batching/ISMBatchTypes.h"
+#include "Logging/LogMacros.h"
 #include "Batching/ISMBatchTransformer.h"
 #include "ISMBatchScheduler.generated.h"
-
 
 // Forward declarations
 class UISMRuntimeComponent;
 class UISMRuntimeSubsystem;
+
+DECLARE_LOG_CATEGORY_EXTERN(LogISMBatching, Log, All);
 
 
 // ============================================================
@@ -39,7 +41,7 @@ struct ISMRUNTIMECORE_API FISMBatchSchedulerSettings
 
 
 // ============================================================
-//  Internal Tracking Structs
+//  Internal Tracking Structs  (shared by both implementations)
 // ============================================================
 
 struct FISMTransformerEntry
@@ -70,89 +72,211 @@ struct FISMTransformerRequestCycle
 
 
 // ============================================================
-//  Scheduler
+//  Base Scheduler
+//  Owns: transformer registry, dispatch, snapshot, cycle tracking,
+//        result application, handle construction.
+//  Does NOT own: result staging, tick drain strategy.
 // ============================================================
 
-UCLASS()
-class ISMRUNTIMECORE_API UISMBatchScheduler : public UObject
+UCLASS(Abstract)
+class ISMRUNTIMECORE_API UISMBatchSchedulerBase : public UObject
 {
     GENERATED_BODY()
 
 public:
 
-    void Initialize(UISMRuntimeSubsystem* InOwningSubsystem);
-    void Deinitialize();
+    virtual void Initialize(UISMRuntimeSubsystem* InOwningSubsystem);
+    virtual void Deinitialize();
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Batch")
     FISMBatchSchedulerSettings Settings;
 
-    bool RegisterTransformer(IISMBatchTransformer* Transformer);
-    void UnregisterTransformer(FName TransformerName);
-    void UnregisterAllTransformers();
-    bool IsTransformerRegistered(FName TransformerName) const;
+    // ===== Transformer Registry =====
+
+    bool  RegisterTransformer(IISMBatchTransformer* Transformer);
+    void  UnregisterTransformer(FName TransformerName);
+    void  UnregisterAllTransformers();
+    bool  IsTransformerRegistered(FName TransformerName) const;
     int32 GetRegisteredTransformerCount() const { return RegisteredTransformers.Num(); }
-    bool HasPendingWork() const { return GetRegisteredTransformerCount() > 0; }
+    bool  HasPendingWork() const { return GetRegisteredTransformerCount() > 0; }
 
-    void Tick(float DeltaTime);
+    // ===== Tick =====
 
-    int32 GetInFlightChunkCount() const;
-    int32 GetPendingResultCount() const;
+    virtual void Tick(float DeltaTime) PURE_VIRTUAL(UISMBatchSchedulerBase::Tick, );
+
+    // ===== Stats =====
+
+    virtual int32 GetInFlightChunkCount() const { return InFlightChunks.Num(); }
+    virtual int32 GetPendingResultCount()  const { return InFlightChunks.Num(); }
     TArray<FName> GetTransformersWithOpenHandles() const;
 
+protected:
 
-private:
-
-    // Key for abandoned chunk identification
-    struct FAbandonedChunkKey
-    {
-        FIntVector Cell;
-        TWeakObjectPtr<UISMRuntimeComponent> Component;
-    };
+    // ===== Handle Callbacks =====
+    //
+    // Called by FISMMutationHandle::Release() and ::Abandon().
+    // Subclasses decide what "receiving a result" means:
+    //   Sync:  apply immediately on this thread
+    //   Async: post to thread-safe staging area, apply on next tick drain
 
     friend struct FISMMutationHandle;
 
-    void OnHandleReleased(FISMBatchMutationResult&& Result, FIntVector CellCoords,
-        TWeakObjectPtr<UISMRuntimeComponent> Component);
-    void OnHandleAbandoned(FIntVector CellCoords, TWeakObjectPtr<UISMRuntimeComponent> Component);
+    virtual void OnHandleReleased(FISMBatchMutationResult&& Result, FIntVector CellCoords,
+        TWeakObjectPtr<UISMRuntimeComponent> Component) PURE_VIRTUAL(UISMBatchSchedulerBase::OnHandleReleased, );
+
+    virtual void OnHandleAbandoned(FIntVector CellCoords,
+        TWeakObjectPtr<UISMRuntimeComponent> Component) PURE_VIRTUAL(UISMBatchSchedulerBase::OnHandleAbandoned, );
+
+    // ===== Dispatch (shared) =====
 
     void DispatchDirtyTransformers();
     void DispatchTransformer(FISMTransformerEntry& Entry);
-    int32 DispatchComponentChunks(
+
+    /**
+     * Builds the snapshot for one component and calls ProcessChunk on the transformer.
+     * Subclasses provide the correct handle type via the friend relationship.
+     * Sync:  no batch lock, results applied before function returns.
+     * Async: batch locks the component, results staged for next tick drain.
+     */
+    virtual int32 DispatchComponentChunks(
         IISMBatchTransformer* Transformer,
         UISMRuntimeComponent* Component,
         const FISMSnapshotRequest& Request,
-        FName TransformerName);
+        FName TransformerName) PURE_VIRTUAL(UISMBatchSchedulerBase::DispatchComponentChunks, return 0;);
+
     FISMBatchSnapshot BuildSnapshot(
         UISMRuntimeComponent* Component,
         FIntVector CellCoords,
         const TArray<int32>& InstanceIndices,
         EISMSnapshotField ReadMask) const;
-    void DrainAndApplyResults();
+
+    // ===== Result Application (shared) =====
+
     bool ApplyMutationResult(const FISMBatchMutationResult& Result);
-    void EnforceHandleTimeouts(double CurrentTime);
+
+    // ===== Cycle Tracking (shared) =====
+
     void NotifyChunkResolved(FName TransformerName, bool bWasAbandoned);
-    FISMInFlightChunk& TrackNewChunk(FName TransformerName,
+
+    FISMInFlightChunk& TrackNewChunk(
+        FName TransformerName,
         TWeakObjectPtr<UISMRuntimeComponent> Component,
         FIntVector CellCoords,
         double IssuedTime);
 
+    // ===== Handle Construction (shared) =====
+    //
+    // Both subclasses construct handles through this helper so the handle
+    // always stores a TWeakObjectPtr<UISMBatchSchedulerBase> and calls
+    // back through the virtual OnHandleReleased/Abandoned.
+
+    FISMMutationHandle MakeHandle(
+        TWeakObjectPtr<UISMRuntimeComponent> Component,
+        FIntVector CellCoords,
+        uint32 GenerationToken,
+        double IssuedTime) const;
+
     // ===== State =====
 
     TWeakObjectPtr<UISMRuntimeSubsystem> OwningSubsystem;
-    TArray<FISMTransformerEntry> RegisteredTransformers;
-    TArray<FISMInFlightChunk> InFlightChunks;
-    TArray<FISMTransformerRequestCycle> ActiveCycles;
+    TArray<FISMTransformerEntry>         RegisteredTransformers;
+    TArray<FISMInFlightChunk>            InFlightChunks;
+    TArray<FISMTransformerRequestCycle>  ActiveCycles;
+    bool                                 bInitialized = false;
+};
 
-    /**
-     * Released results - replaced TQueue to avoid heap-allocated linked list nodes
-     * which were becoming corrupted under heavy physics load.
-     * Swap-and-process pattern: lock briefly to swap, process without holding lock.
-     */
-    FCriticalSection ReleasedResultsLock;
-    TArray<FISMBatchMutationResult> ReleasedResults;
 
-    FCriticalSection AbandonedChunksLock;
-    TArray<FAbandonedChunkKey> AbandonedChunks;
+// ============================================================
+//  Synchronous Scheduler
+//
+//  ProcessChunk completes before DispatchComponentChunks returns.
+//  OnHandleReleased applies mutations immediately on the game thread.
+//  No locking, no staging, no drain loop.
+//  Safe default for all current use cases.
+// ============================================================
 
-    bool bInitialized = false;
+UCLASS()
+class ISMRUNTIMECORE_API UISMBatchSchedulerSync : public UISMBatchSchedulerBase
+{
+    GENERATED_BODY()
+
+public:
+
+    virtual void Tick(float DeltaTime) override;
+
+protected:
+
+    virtual void OnHandleReleased(FISMBatchMutationResult&& Result, FIntVector CellCoords,
+        TWeakObjectPtr<UISMRuntimeComponent> Component) override;
+
+    virtual void OnHandleAbandoned(FIntVector CellCoords,
+        TWeakObjectPtr<UISMRuntimeComponent> Component) override;
+
+    virtual int32 DispatchComponentChunks(
+        IISMBatchTransformer* Transformer,
+        UISMRuntimeComponent* Component,
+        const FISMSnapshotRequest& Request,
+        FName TransformerName) override;
+};
+
+
+// ============================================================
+//  Async Scheduler
+//
+//  ProcessChunk may hand work to a background thread.
+//  OnHandleReleased posts results to a thread-safe staging area.
+//  Results are applied on the game thread during the next Tick drain.
+//
+//  FCriticalSection lives in FThreadedState (heap-allocated) to avoid
+//  UObject CDO construction corrupting the mutex handle and poisoning
+//  every TArray stored after it in the object layout.
+// ============================================================
+
+UCLASS()
+class ISMRUNTIMECORE_API UISMBatchScheduler : public UISMBatchSchedulerBase
+{
+    GENERATED_BODY()
+
+public:
+
+    virtual void Initialize(UISMRuntimeSubsystem* InOwningSubsystem) override;
+    virtual void Deinitialize() override;
+    virtual void Tick(float DeltaTime) override;
+
+protected:
+
+    virtual void OnHandleReleased(FISMBatchMutationResult&& Result, FIntVector CellCoords,
+        TWeakObjectPtr<UISMRuntimeComponent> Component) override;
+
+    virtual void OnHandleAbandoned(FIntVector CellCoords,
+        TWeakObjectPtr<UISMRuntimeComponent> Component) override;
+
+    virtual int32 DispatchComponentChunks(
+        IISMBatchTransformer* Transformer,
+        UISMRuntimeComponent* Component,
+        const FISMSnapshotRequest& Request,
+        FName TransformerName) override;
+
+private:
+
+    struct FAbandonedChunkKey
+    {
+        FIntVector                           Cell;
+        TWeakObjectPtr<UISMRuntimeComponent> Component;
+    };
+
+    void DrainAndApplyResults();
+    void EnforceHandleTimeouts(double CurrentTime); // TODO Phase 2
+
+    // See class comment above for why these live in a TUniquePtr
+    struct FThreadedState
+    {
+        FCriticalSection                ReleasedResultsLock;
+        TArray<FISMBatchMutationResult> ReleasedResults;
+
+        FCriticalSection                AbandonedChunksLock;
+        TArray<FAbandonedChunkKey>      AbandonedChunks;
+    };
+
+    TUniquePtr<FThreadedState> ThreadedState;
 };

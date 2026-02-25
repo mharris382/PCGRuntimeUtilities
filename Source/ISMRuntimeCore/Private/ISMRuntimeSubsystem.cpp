@@ -6,6 +6,7 @@
 #include "ISMInstanceHandle.h"
 #include "ISMInstanceState.h"
 #include "CollisionQueryParams.h"
+#include "ISMRuntimeSettings.h"
 #include "Batching/ISMBatchScheduler.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "ISMQueryFilter.h"
@@ -27,12 +28,7 @@ void UISMRuntimeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
     
     CachedStats = FISMRuntimeStats();
     StatsUpdateFrame = 0;
-
-    if (!BatchScheduler)
-    {
-        BatchScheduler = NewObject<UISMBatchScheduler>(this);
-    }
-    BatchScheduler->Initialize(this);
+    InitializeBatchScheduler();
 
 }
 
@@ -74,12 +70,11 @@ void UISMRuntimeSubsystem::Tick(float DeltaTime)
 	}
 }
 
-UISMBatchScheduler* UISMRuntimeSubsystem::GetOrCreateBatchSchduler()
+UISMBatchSchedulerBase* UISMRuntimeSubsystem::GetOrCreateBatchSchduler()
 {
 	if (!BatchScheduler)
     {
-        BatchScheduler = NewObject<UISMBatchScheduler>(this);
-        BatchScheduler->Initialize(this);
+        InitializeBatchScheduler();
     }
     return BatchScheduler;
 }
@@ -749,6 +744,29 @@ void UISMRuntimeSubsystem::CleanupRedirectMap()
             It.RemoveCurrent();
         }
     }
+}
+
+void UISMRuntimeSubsystem::InitializeBatchScheduler()
+{
+    if (BatchScheduler && bBatchSchedulerInitialized)
+    {
+        return;
+    }
+    bBatchSchedulerInitialized = true;
+    if (!BatchScheduler)
+    {
+        const UISMRuntimeSettings* Settings = GetDefault<UISMRuntimeSettings>();
+        bool useAsyncScheduler = Settings ? Settings->bUseAsyncBatchScheduler : false;
+        if (useAsyncScheduler)
+        {
+            BatchScheduler = NewObject<UISMBatchScheduler>(this);
+        }
+        else
+        {
+            BatchScheduler = NewObject<UISMBatchSchedulerSync>(this);
+        }
+    }
+    BatchScheduler->Initialize(this);
 }
 
 // ============================================================

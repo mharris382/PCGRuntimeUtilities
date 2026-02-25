@@ -6,7 +6,8 @@
 #include "ISMBatchTransformer.generated.h"
 
 // Forward declarations
-class UISMBatchScheduler;
+class UISMBatchSchedulerBase;
+class UISMRuntimeComponent;
 
 
 // ============================================================
@@ -15,7 +16,7 @@ class UISMBatchScheduler;
 
 /**
  * A lease on a set of instance indices within a specific snapshot chunk.
- * Held by the transformer while async compute is in flight.
+ * Held by the transformer while compute is in flight.
  *
  * While a handle is open:
  *   - The scheduler will not dispatch a second mutation request for the same
@@ -27,15 +28,16 @@ class UISMBatchScheduler;
  * either with a result or empty-handed (abandon). Handles that exceed the scheduler's
  * timeout are force-released as "no change" and a warning is logged.
  *
+ * The handle is scheduler-agnostic: Release() calls back through UISMBatchSchedulerBase
+ * so both the sync and async scheduler implementations receive the result without
+ * the transformer needing to know which scheduler it is talking to.
+ *
  * Usage:
- *   // In ProcessChunk() - transformer receives handle, stores it, releases when future resolves
- *   Handle.Release(MyMutationResult);   // apply result
+ *   Handle.Release(MyMutationResult);   // submit result, release lease
  *   Handle.Abandon();                   // no change, release lease
  */
-
 struct ISMRUNTIMECORE_API FISMMutationHandle
 {
-    
     FISMMutationHandle() = default;
 
     // Non-copyable - a handle represents a unique lease
@@ -50,8 +52,8 @@ struct ISMRUNTIMECORE_API FISMMutationHandle
 
     /**
      * Submit the mutation result and release this lease.
-     * The scheduler will apply the result on the next game thread tick
-     * after validating the generation token.
+     * Sync scheduler:  result is applied immediately on the calling thread (game thread).
+     * Async scheduler: result is staged and applied on the next game thread tick.
      * Calling Release() on an already-released handle is a no-op (logs warning in debug).
      */
     void Release(FISMBatchMutationResult&& Result);
@@ -67,33 +69,36 @@ struct ISMRUNTIMECORE_API FISMMutationHandle
     bool IsOpen() const { return bIsOpen && Scheduler.IsValid(); }
 
     /** The cell and component this handle covers. For transformer bookkeeping. */
-    FIntVector GetCellCoordinates() const { return CellCoordinates; }
-    TWeakObjectPtr<UISMRuntimeComponent> GetTargetComponent() const { return TargetComponent; }
+    FIntVector                           GetCellCoordinates() const { return CellCoordinates; }
+    TWeakObjectPtr<UISMRuntimeComponent> GetTargetComponent()  const { return TargetComponent; }
 
-    /** Generation token from the snapshot. Transformers can read this for their own staleness checks. */
+    /** Generation token from the snapshot. Transformers can use this for staleness checks. */
     uint32 GetGenerationToken() const { return GenerationToken; }
 
     /** World time at which this handle was issued. Used by the scheduler for timeout enforcement. */
     double GetIssuedTime() const { return IssuedTimeSeconds; }
 
 private:
-    // Only the scheduler creates valid handles
-    friend class UISMBatchScheduler;
 
-    /** Internal constructor used by the scheduler */
+    // Both sync and async schedulers construct handles via the base class
+    friend class UISMBatchSchedulerBase;
+
+    /** Internal constructor - only called by the scheduler */
     FISMMutationHandle(
-        TWeakObjectPtr<UISMBatchScheduler> InScheduler,
-        TWeakObjectPtr<UISMRuntimeComponent> InComponent,
-        FIntVector InCellCoords,
-        uint32 InGenerationToken,
-        double InIssuedTime);
+        TWeakObjectPtr<UISMBatchSchedulerBase> InScheduler,
+        TWeakObjectPtr<UISMRuntimeComponent>   InComponent,
+        FIntVector                             InCellCoords,
+        uint32                                 InGenerationToken,
+        double                                 InIssuedTime);
 
-    TWeakObjectPtr<UISMBatchScheduler>    Scheduler;
-    TWeakObjectPtr<UISMRuntimeComponent>  TargetComponent;
-    FIntVector                            CellCoordinates = FIntVector::ZeroValue;
-    uint32                                GenerationToken = 0;
-    double                                IssuedTimeSeconds = 0.0;
-    bool                                  bIsOpen = false;
+    // Scheduler pointer is base class - handle does not care whether
+    // it is sync or async, it just calls the virtual OnHandleReleased/Abandoned
+    TWeakObjectPtr<UISMBatchSchedulerBase> Scheduler;
+    TWeakObjectPtr<UISMRuntimeComponent>   TargetComponent;
+    FIntVector                             CellCoordinates = FIntVector::ZeroValue;
+    uint32                                 GenerationToken = 0;
+    double                                 IssuedTimeSeconds = 0.0;
+    bool                                   bIsOpen = false;
 };
 
 
@@ -108,7 +113,7 @@ class UISMBatchTransformer : public UInterface
 };
 
 /**
- * Interface for systems that want to perform async batched read/write operations
+ * Interface for systems that want to perform batched read/write operations
  * on ISMRuntimeComponent instance data.
  *
  * Implementations register with UISMBatchScheduler. Each tick the scheduler checks
@@ -128,8 +133,8 @@ class UISMBatchTransformer : public UInterface
  *     - ProcessChunk() maps PCG output attributes back to instance mutations
  *
  * Threading contract:
- *   - BuildRequest()  : called on game thread
- *   - ProcessChunk()  : called on any thread (task graph) - no UObject access allowed
+ *   - BuildRequest()      : called on game thread
+ *   - ProcessChunk()      : called on any thread (task graph) - NO UObject access allowed
  *   - OnRequestComplete() : called on game thread after all chunks are applied
  *
  * V1 constraints:
@@ -176,7 +181,7 @@ public:
     virtual bool IsDirty() const = 0;
 
     /**
-     * Called by the scheduler after it has finished dispatching all chunks for this cycle.
+     * Called by the scheduler after dispatching all chunks for this cycle.
      * Transformers should clear their dirty flag here (not in BuildRequest).
      * Called on the game thread.
      */
@@ -193,9 +198,6 @@ public:
      *   - Which components it wants to read/write
      *   - What spatial bounds to cover
      *   - Which fields it needs (read mask) and will write (write mask)
-     *
-     * The scheduler uses this to generate one FISMBatchSnapshot per occupied spatial cell
-     * within the declared bounds, then calls ProcessChunk() for each.
      */
     virtual FISMSnapshotRequest BuildRequest() = 0;
 
@@ -204,48 +206,30 @@ public:
 
     /**
      * Process a single chunk (one spatial cell of one component).
-     * Called on a background thread - NO UObject access is permitted here.
+     * Called on a background thread in the async scheduler - NO UObject access permitted.
+     * Called on the game thread in the sync scheduler.
      * The snapshot is passed by value; the transformer owns this copy.
      *
      * The transformer MUST either:
      *   a) Call Handle.Release(result) with a FISMBatchMutationResult, or
      *   b) Call Handle.Abandon() to indicate no changes for this chunk.
-     *
-     * Failure to call either will result in the handle timing out, a warning being logged,
-     * and the chunk being treated as abandoned by the scheduler.
-     *
-     * @param Chunk     - Read-only snapshot of one spatial cell's instances
-     * @param Handle    - Lease object that must be released when processing is complete
      */
     virtual void ProcessChunk(FISMBatchSnapshot Chunk, FISMMutationHandle Handle) = 0;
 
 
-    // ===== Completion Notification =====
+    // ===== Completion / Lifecycle Notifications =====
 
     /**
      * Called on the game thread after all chunks from the current request cycle
      * have been processed and applied (or discarded as stale/abandoned).
-     *
-     * Use this to:
-     *   - Trigger follow-up logic that depends on mutations being visible
-     *   - Update internal state that requires knowing the cycle is complete
-     *   - Kick off the next PCG graph execution if chaining graphs
-     *
-     * Not called if BuildRequest() produced zero chunks (nothing to process).
      */
     virtual void OnRequestComplete() {}
 
+    /** Called when a handle is issued for a chunk. */
     virtual void OnHandleIssued(const FISMBatchSnapshot& Snapshot) {}
 
     virtual void OnHandleChunksChanged(const TArray<FISMBatchSnapshot>& Snapshots) {}
 
-    /** Called when the handle is released OR abandoned.
-     *  Override to reset per-cycle state. Default is no-op. */
+    /** Called when the handle is released OR abandoned. Override to reset per-cycle state. */
     virtual void OnHandleReleased() {}
 };
-
-
-
-
-
-

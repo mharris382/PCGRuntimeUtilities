@@ -160,7 +160,7 @@ struct FISMBatchTestFixture
     AActor*                  OwnerActor       = nullptr;
     UInstancedStaticMeshComponent* ISMComp   = nullptr;
     UISMRuntimeComponent*    RuntimeComponent = nullptr;
-    UISMBatchScheduler*      Scheduler        = nullptr;
+    UISMBatchSchedulerBase*      Scheduler        = nullptr;
 
     FISMBatchTestFixture()
     {

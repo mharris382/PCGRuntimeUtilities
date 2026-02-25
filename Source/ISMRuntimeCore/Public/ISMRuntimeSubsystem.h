@@ -11,7 +11,7 @@
 
 // Forward declarations
 class UISMRuntimeComponent;
-class UISMBatchScheduler;
+class UISMBatchSchedulerBase;
 
 
 
@@ -99,10 +99,11 @@ public:
     // The actual tick - drives the scheduler
     virtual void Tick(float DeltaTime) override;
     
-	UISMBatchScheduler* GetBatchScheduler() const { return BatchScheduler; }
-    UISMBatchScheduler* GetOrCreateBatchSchduler();
+	UISMBatchSchedulerBase* GetBatchScheduler() const { return BatchScheduler; }
+    UISMBatchSchedulerBase* GetOrCreateBatchSchduler();
 
-    UISMBatchScheduler* BatchScheduler = nullptr;
+    UISMBatchSchedulerBase* BatchScheduler = nullptr;
+	bool bBatchSchedulerInitialized = false;
 
     // ===== Component Registration =====
     
@@ -352,6 +353,9 @@ protected:
 #pragma endregion
 
 
+                private:
+
+					void InitializeBatchScheduler();
                   
 };
 /*

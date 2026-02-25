@@ -3,7 +3,7 @@
 #include "ISMRuntimeComponent.h"
 
 FISMMutationHandle::FISMMutationHandle(
-    TWeakObjectPtr<UISMBatchScheduler> InScheduler,
+    TWeakObjectPtr<UISMBatchSchedulerBase> InScheduler,
     TWeakObjectPtr<UISMRuntimeComponent> InComponent,
     FIntVector InCellCoords,
     uint32 InGenerationToken,
@@ -70,7 +70,7 @@ void FISMMutationHandle::Release(FISMBatchMutationResult&& Result)
 
     bIsOpen = false;
 
-    if (UISMBatchScheduler* Sched = Scheduler.Get())
+    if (UISMBatchSchedulerBase* Sched = Scheduler.Get())
     {
         Sched->OnHandleReleased(MoveTemp(Result), CellCoordinates, TargetComponent);
     }
@@ -86,7 +86,7 @@ void FISMMutationHandle::Abandon()
 
     bIsOpen = false;
 
-    if (UISMBatchScheduler* Sched = Scheduler.Get())
+    if (UISMBatchSchedulerBase* Sched = Scheduler.Get())
     {
         Sched->OnHandleAbandoned(CellCoordinates, TargetComponent);
     }

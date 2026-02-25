@@ -9,7 +9,7 @@
 class UISMAnimationDataAsset;
 class UISMRuntimeComponent;
 class UInstancedStaticMeshComponent;
-class UISMBatchScheduler;
+class UISMBatchSchedulerBase;
 class AActor;
 
 /**
@@ -168,7 +168,7 @@ private:
      * Cached scheduler reference. Grabbed from subsystem on BeginPlay.
      * Stored to avoid subsystem lookup on every tick.
      */
-    TWeakObjectPtr<UISMBatchScheduler> CachedScheduler;
+    TWeakObjectPtr<UISMBatchSchedulerBase> CachedScheduler;
 
     /** Whether animation is paused (transformer IsDirty always returns false). */
     bool bAnimationPaused = false;

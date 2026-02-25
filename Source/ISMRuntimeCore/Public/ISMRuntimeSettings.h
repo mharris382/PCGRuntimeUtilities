@@ -4,11 +4,26 @@
 #include "Engine/DeveloperSettings.h"
 #include "ISMRuntimeSettings.generated.h"
 
+
+UCLASS(Abstract, config = Game, defaultconfig)
+class ISMRUNTIMECORE_API UISMRuntimeSettingsBase : public UDeveloperSettings
+{
+    GENERATED_BODY()
+
+#if WITH_EDITOR
+
+public:
+    virtual FName GetCategoryName() const override { return TEXT("ISM Runtime"); }
+#endif
+
+
+};
+
 /**
  * Project-wide settings for ISM Runtime system
  */
-UCLASS(config=Game, defaultconfig, meta=(DisplayName="ISM Runtime"))
-class ISMRUNTIMECORE_API UISMRuntimeSettings : public UDeveloperSettings
+UCLASS(config = Game, defaultconfig, meta = (DisplayName = "ISM Runtime"))
+class ISMRUNTIMECORE_API UISMRuntimeSettings : public UISMRuntimeSettingsBase
 {
     GENERATED_BODY()
     
@@ -56,7 +71,15 @@ public:
     bool bCollectStatistics = true;
     
 #if WITH_EDITOR
-	virtual FText GetSectionText() const override { return NSLOCTEXT("ISMRuntime", "ISMRuntimeSettingsSection", "ISM Runtime"); }
-	virtual FText GetSectionDescription() const override { return NSLOCTEXT("ISMRuntime", "ISMRuntimeSettingsDescription", "Configure settings for the ISM Runtime system, including performance tuning and debug visualization options."); }
+    virtual FText GetSectionText() const override
+    {
+        return NSLOCTEXT("ISMRuntime", "ISMRuntimeSettingsSection", "ISM Runtime");
+    }
+
+    virtual FText GetSectionDescription() const override
+    {
+        return NSLOCTEXT("ISMRuntime", "ISMRuntimeSettingsDescription",
+            "Configure settings for the ISM Runtime system, including performance tuning and debug visualization options.");
+    }
 #endif
 };

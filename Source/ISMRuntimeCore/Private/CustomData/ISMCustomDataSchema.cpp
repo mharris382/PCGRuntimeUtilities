@@ -12,6 +12,17 @@ const FISMCustomDataSchema* UISMRuntimeDeveloperSettings::ResolveSchema(FName Sc
 	{
 		return &DefaultSchema;
 	}
+	if (bUseExternalSchemaDatabase && HandlerDatabase.IsValid())
+	{
+		if(const FISMCustomDataSchema* FoundRow = HandlerDatabase->FindRow<FISMCustomDataSchema>(SchemaName, TEXT(""), false))
+		{
+			return FoundRow;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Schema '%s' not found in external database. Falling back to registry."), *SchemaName.ToString());
+		}
+	}
 	if(const FISMCustomDataSchema* FoundSchema = SchemaRegistry.Find(SchemaName))
 	{
 		return &SchemaRegistry[SchemaName];
@@ -70,26 +81,26 @@ TArray<float> FISMCustomDataSchema::ExtractMappedValues(const TArray<float>& Ful
 TArray<FName> UISMRuntimeDeveloperSettings::GetAllSchemaNames() const
 {
 	TArray<FName> Names;
-	SchemaRegistry.GetKeys(Names);
+	if (bUseExternalSchemaDatabase && HandlerDatabase.IsValid())
+	{
+		TArray<FName> DatabaseNames = HandlerDatabase.Get()->GetRowNames();
+		Names.Append(DatabaseNames);
+	}
+	TArray<FName> KeyNames;
+	SchemaRegistry.GetKeys(KeyNames);
+	for (FName& Name : KeyNames)
+	{
+		if (!Names.Contains(Name))
+		{
+			Names.Add(Name);
+		}
+	}
 	return Names;
 }
 
 #pragma region WITH_EDITOR
 
-FText UISMRuntimeDeveloperSettings::GetSectionText() const
-{
-	return FText::FromString(TEXT("ISM Runtime Materials Schemas"));
-}
 
-FText UISMRuntimeDeveloperSettings::GetSectionDescription() const
-{
-	return FText::FromString(TEXT("Define mapping schemas that tell ISMRuntimeUtils how to visually transfer Per instance Custom Data from ISM onto Dynamic Material Instances"));
-}
-
-FName UISMRuntimeDeveloperSettings::GetCategoryName() const
-{
-	return FName(TEXT("ISM Materials Schemas"));
-}
 
 #pragma endregion
 

@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
+#include "ISMRuntimeSettings.h"
+#include "Engine/DataTable.h"
 #include "ISMCustomDataSchema.generated.h"
 
 // ============================================================
@@ -173,8 +175,8 @@ struct ISMRUNTIMECORE_API FISMCustomDataSchema
  * INI section: [/Script/ISMRuntimeCore.ISMRuntimeDeveloperSettings]
  * INI file: DefaultGame.ini
  */
-UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "ISM Runtime"))
-class ISMRUNTIMECORE_API UISMRuntimeDeveloperSettings : public UDeveloperSettings
+UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "ISM Runtime CustomData"))
+class ISMRUNTIMECORE_API UISMRuntimeDeveloperSettings : public UISMRuntimeSettingsBase
 {
     GENERATED_BODY()
 
@@ -199,6 +201,8 @@ public:
     FISMCustomDataSchema DefaultSchema; // Cached pointer to the default schema for quick access at runtime
 
 
+
+
     /**
      * Global PICD schema registry.
      * Key: unique FName identifier used by UISMInstanceDataAsset::SchemaName
@@ -207,13 +211,13 @@ public:
      * Editor: displayed as an editable map with a custom detail panel.
      * Entries here populate the dropdown in UISMInstanceDataAsset.
      */
-    UPROPERTY(Config, EditAnywhere, Category = "PICD Schemas",
-              meta = (DisplayName = "PICD Schema Registry",
-                      ToolTip = "Define your project's PICD channel mapping schemas here.\n Each schema is identified by an FName key and can be referenced \n from any ISM Instance Data Asset."))
+    UPROPERTY(Config, EditAnywhere, Category = "PICD Schemas", meta = (DisplayName = "PICD Schema Registry", ToolTip = "Define your project's PICD channel mapping schemas here.\n Each schema is identified by an FName key and can be referenced \n from any ISM Instance Data Asset."))
     TMap<FName, FISMCustomDataSchema> SchemaRegistry;
 
 
-
+	bool bUseExternalSchemaDatabase = true;
+    UPROPERTY(Config, EditAnywhere, Category = "PICD Schemas", meta = (DisplayName = "PICD Schema Registry",ToolTip = ""))
+    TSoftObjectPtr<UDataTable> HandlerDatabase;
 
 
     // ===== DMI Pool Defaults =====
@@ -263,15 +267,25 @@ public:
     const FISMCustomDataSchema* GetDefaultSchema() const;
 
     /** True if a schema with the given name exists in the registry */
-    bool HasSchema(FName SchemaName) const { return SchemaRegistry.Contains(SchemaName); }
+    bool HasSchema(FName SchemaName) const 
+    { 
+        if(!bUseExternalSchemaDatabase && HandlerDatabase.IsValid())
+        {
+            return SchemaRegistry.Contains(SchemaName);
+        }
+        else
+        {
+			bool found = HandlerDatabase->FindRow<FISMCustomDataSchema>(SchemaName, TEXT(""), false) != nullptr;
+			return found ? true : SchemaRegistry.Contains(SchemaName);
+        }
+    }
 
     /** Get all registered schema names (for editor dropdown population) */
     TArray<FName> GetAllSchemaNames() const;
 
 #if WITH_EDITOR
-    virtual FText GetSectionText() const override;
-    virtual FText GetSectionDescription() const override;
-    virtual FName GetCategoryName() const override;
+    virtual FText GetSectionText() const override { return FText::FromString(TEXT("ISM Runtime Materials Schemas")); }
+    virtual FText GetSectionDescription() const override { return FText::FromString(TEXT("Define mapping schemas that tell ISMRuntimeUtils how to visually transfer Per instance Custom Data from ISM onto Dynamic Material Instances")); }
 #endif
 
 private:

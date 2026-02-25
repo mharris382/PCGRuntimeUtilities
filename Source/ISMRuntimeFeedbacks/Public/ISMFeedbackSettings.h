@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
+#include "ISMRuntimeSettings.h"
 #include "ISMFeedbackHandlerDataAsset.h"
 #include "ISMFeedbackSettings.generated.h"
 
@@ -20,7 +21,7 @@
  * 4. Done!
  */
 UCLASS(Config=Game, DefaultConfig, meta=(DisplayName="ISM Feedback"))
-class ISMRUNTIMEFEEDBACKS_API UISMFeedbackSettings : public UDeveloperSettings
+class ISMRUNTIMEFEEDBACKS_API UISMFeedbackSettings : public UISMRuntimeSettingsBase
 {
     GENERATED_BODY()
     
@@ -91,13 +92,12 @@ public:
     
     // ===== UDeveloperSettings Interface =====
     
-    virtual FName GetCategoryName() const override { return TEXT("Plugins"); }
+#if WITH_EDITOR
     virtual FText GetSectionText() const override 
     { 
         return NSLOCTEXT("ISMFeedback", "SettingsSection", "ISM Feedback"); 
     }
     
-#if WITH_EDITOR
     virtual FText GetSectionDescription() const override
     {
         return NSLOCTEXT("ISMFeedback", "SettingsDescription",

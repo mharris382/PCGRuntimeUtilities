@@ -22,6 +22,7 @@ public class ISMRuntimeEditor : ModuleRules
                 "ISMRuntimePhysics",
                 "ISMRuntimeInteraction",
                 "ISMRuntimeDamage",
+                "ISMRuntimeFeedbacks"
             }
         );
 

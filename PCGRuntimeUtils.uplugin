@@ -14,6 +14,7 @@
   "IsBetaVersion": false,
   "IsExperimentalVersion": false,
   "Installed": true,
+  "EditorCustomVirtualPath": "ISMRuntime",
   "Modules": [
     {
       "Name": "ISMRuntimeDamage",
@@ -66,24 +67,24 @@
       "LoadingPhase": "Default"
     },
     {
-        "Name": "ISMRuntimeCoreTests",
-        "Type": "UncookedOnly",
-        "LoadingPhase": "Default"
+      "Name": "ISMRuntimeCoreTests",
+      "Type": "UncookedOnly",
+      "LoadingPhase": "Default"
     },
     {
-        "Name": "ISMRuntimeDestruction",
-        "Type": "Runtime",
-        "LoadingPhase": "Default"
+      "Name": "ISMRuntimeDestruction",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
     },
     {
-        "Name": "ISMRuntimeAnimation",
-        "Type": "Runtime",
-        "LoadingPhase": "Default"
+      "Name": "ISMRuntimeAnimation",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
     },
     {
-        "Name": "ISMRuntimePCGInterop",
-        "Type": "Runtime",
-        "LoadingPhase": "Default"
+      "Name": "ISMRuntimePCGInterop",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
     }
   ],
   "Plugins": [

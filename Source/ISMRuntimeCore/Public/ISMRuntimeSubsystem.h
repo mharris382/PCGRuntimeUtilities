@@ -43,7 +43,7 @@ struct FISMRuntimeStats
 
 
 USTRUCT(BlueprintType)
-struct FISMComponentMapping
+struct FISMComponentMapping 
 {
     GENERATED_BODY()
 
@@ -55,7 +55,7 @@ struct FISMComponentMapping
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime")
     TSubclassOf<UISMRuntimeComponent> RuntimeComponentClass;
 
-    /** Optional: Override spatial index cell size for this component */
+    /** Opt ional: Override spatial index cell size for this component */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM Runtime", meta = (ClampMin = "100.0"))
     float OverrideCellSize = 0.0f;
 
@@ -88,6 +88,9 @@ public:
     virtual void Deinitialize() override;
     virtual bool DoesSupportWorldType(EWorldType::Type WorldType) const override;
 
+
+    // ===== Batching =====
+
     // FTickableGameObject - required pure virtual
     virtual TStatId GetStatId() const override
     {
@@ -101,8 +104,9 @@ public:
     
 	UISMBatchSchedulerBase* GetBatchScheduler() const { return BatchScheduler; }
     UISMBatchSchedulerBase* GetOrCreateBatchSchduler();
-
-    UISMBatchSchedulerBase* BatchScheduler = nullptr;
+    
+    UPROPERTY()
+    TObjectPtr<UISMBatchSchedulerBase> BatchScheduler = nullptr;
 	bool bBatchSchedulerInitialized = false;
 
     // ===== Component Registration =====
@@ -202,7 +206,7 @@ protected:
     
     /** Frame number when stats were last updated */
     uint32 StatsUpdateFrame = 0;
-    
+	
     // ===== Helper Functions =====
     
     /** Clean up invalid component references */

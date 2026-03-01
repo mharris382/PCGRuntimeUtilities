@@ -34,14 +34,15 @@ void UISMRuntimeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UISMRuntimeSubsystem::Deinitialize()
 {
+    bBatchSchedulerInitialized = false;
     // Clean up all registered components
     AllComponents.Empty();
     ComponentsByTag.Empty();
 
     if(BatchScheduler && IsValid(BatchScheduler))
     {
-        //BatchScheduler->Deinitialize();
-        BatchScheduler = nullptr;
+        BatchScheduler->Deinitialize();
+        
 	}
     
     UE_LOG(LogTemp, Log, TEXT("ISMRuntimeSubsystem: Deinitialized"));
@@ -752,19 +753,21 @@ void UISMRuntimeSubsystem::InitializeBatchScheduler()
     {
         return;
     }
-    bBatchSchedulerInitialized = true;
-    if (!BatchScheduler)
+    if (BatchScheduler)
     {
-        const UISMRuntimeSettings* Settings = GetDefault<UISMRuntimeSettings>();
-        bool useAsyncScheduler = Settings ? Settings->bUseAsyncBatchScheduler : false;
-        if (useAsyncScheduler)
-        {
-            BatchScheduler = NewObject<UISMBatchScheduler>(this);
-        }
-        else
-        {
-            BatchScheduler = NewObject<UISMBatchSchedulerSync>(this);
-        }
+		BatchScheduler->Deinitialize();
+		BatchScheduler = nullptr;
+    }
+    bBatchSchedulerInitialized = true;
+    const UISMRuntimeSettings* Settings = GetDefault<UISMRuntimeSettings>();
+    bool useAsyncScheduler = Settings ? Settings->bUseAsyncBatchScheduler : false;
+    if (useAsyncScheduler)
+    {
+        BatchScheduler = NewObject<UISMBatchScheduler>(this);
+    }
+    else
+    {
+        BatchScheduler = NewObject<UISMBatchSchedulerSync>(this);
     }
     BatchScheduler->Initialize(this);
 }

@@ -15,12 +15,13 @@ namespace
 {
     static UPhysicalMaterial* GetPhysicalMaterialFromPrimitive(const UPrimitiveComponent* PrimComp)
     {
-        if (PrimComp)
-        {
-            return PrimComp->GetBodyInstance()
-                ? PrimComp->GetBodyInstance()->GetSimplePhysicalMaterial()
-                : nullptr;
-        }
+        if (!PrimComp)
+            return nullptr;
+
+        FBodyInstance* BI = PrimComp->GetBodyInstance();
+        if (!BI || !BI->IsValidBodyInstance())
+            return nullptr;
+
         return nullptr;
     }
 
@@ -100,9 +101,12 @@ FISMFeedbackParticipant FISMFeedbackParticipant::FromActorComponent(const UActor
         // Try to get physical material from PrimitiveComponent
         if (const UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(SceneComp))
         {
+#if WITH_EDITOR
             Participant.ParticipantPhysicalMaterial = PrimComp->GetBodyInstance()
                 ? PrimComp->GetBodyInstance()->GetSimplePhysicalMaterial()
                 : nullptr;
+#endif // WITH_EDITOR
+
         }
     }
     else if (Participant.Participant.IsValid())

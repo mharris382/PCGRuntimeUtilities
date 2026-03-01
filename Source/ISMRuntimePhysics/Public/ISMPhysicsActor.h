@@ -74,6 +74,9 @@ public:
     UPROPERTY()
     TArray<UMaterialInstanceDynamic*> CachedDMIs;
 
+
+
+    virtual TObjectPtr<UStaticMeshComponent> ConstructMeshComponent();
     // ===== Actor Lifecycle =====
     
     virtual void Tick(float DeltaTime) override;

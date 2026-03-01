@@ -21,7 +21,7 @@ AISMPhysicsActor::AISMPhysicsActor()
     PrimaryActorTick.bStartWithTickEnabled = false; // Disabled when in pool
     
     // Create mesh component
-    MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PhysicsMesh"));
+    MeshComponent = ConstructMeshComponent();
     RootComponent = MeshComponent;
     
     // Configure for physics
@@ -32,6 +32,12 @@ AISMPhysicsActor::AISMPhysicsActor()
     
     // Make transient so we don't save pooled actors
     SetFlags(RF_Transient);
+}
+
+
+TObjectPtr<UStaticMeshComponent> AISMPhysicsActor::ConstructMeshComponent()
+{
+    return CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PhysicsMesh"));
 }
 
 //void AISMPhysicsActor::BeginPlay()
@@ -80,6 +86,7 @@ bool AISMPhysicsActor::ShouldSkipSlot_Implementation(int32 SlotIndex) const
 {
     return false; // Accept all slots
 }
+
 
 void AISMPhysicsActor::Tick(float DeltaTime)
 {

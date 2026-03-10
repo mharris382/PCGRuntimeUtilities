@@ -23,10 +23,12 @@ const FISMCustomDataSchema* UISMRuntimeDeveloperSettings::ResolveSchema(FName Sc
 			UE_LOG(LogTemp, Warning, TEXT("Schema '%s' not found in external database. Falling back to registry."), *SchemaName.ToString());
 		}
 	}
-	if(const FISMCustomDataSchema* FoundSchema = SchemaRegistry.Find(SchemaName))
+	if(SchemaRegistry.Contains(SchemaName))
 	{
-		return &SchemaRegistry[SchemaName];
+		 const FISMCustomDataSchema* schema = &SchemaRegistry[SchemaName];
+		 return schema;
 	}
+
 	UE_LOG(LogTemp, Warning, TEXT("Schema '%s' not found in registry. Falling back to default schema."), *SchemaName.ToString());
 	return &DefaultSchema;
 }

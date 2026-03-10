@@ -187,13 +187,13 @@ void AISMPhysicsActor::OnRequestedFromPool_Implementation(UISMPoolDataAsset* Dat
 
         if (ShouldStartKinematic())
         {
-			StartSimulatingPhysics(FVector::ZeroVector, FVector::ZeroVector);
+            StopSimulatingPhysics();
             UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("[%s] Started in KINEMATIC mode"), *GetName());
+            // Normal mode: Simulate immediately
         }
         else
         {
-            // Normal mode: Simulate immediately
-            StopSimulatingPhysics();
+			StartSimulatingPhysics(FVector::ZeroVector, FVector::ZeroVector);
             UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("[%s] Started SIMULATING physics"), *GetName());
         }
 
@@ -421,10 +421,6 @@ bool AISMPhysicsActor::IsKinematic() const { return bIsKinematic; }
 void AISMPhysicsActor::StartSimulatingPhysics(FVector InitialVelocity, FVector InitialAngularVelocity)
 {
     if (!MeshComponent)return;
-    if((bIsKinematicInitted && !bIsKinematic))
-    {
-        return; // Already simulating
-	}
 	bIsKinematic = false;
 	bIsKinematicInitted = true;
     MeshComponent->SetSimulatePhysics(true);
@@ -435,10 +431,6 @@ void AISMPhysicsActor::StartSimulatingPhysics(FVector InitialVelocity, FVector I
 void AISMPhysicsActor::StopSimulatingPhysics()
 {
     if (!MeshComponent)return;
-    if((bIsKinematicInitted && bIsKinematic))
-    {
-        return; // Already kinematic
-	}
 	bIsKinematic = true;
 	bIsKinematicInitted = true;
     MeshComponent->SetSimulatePhysics(false);

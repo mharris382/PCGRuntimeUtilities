@@ -202,6 +202,8 @@ public:
 
 
 
+    UPROPERTY(Config, EditAnywhere, Category = "PICD Schemas")
+    bool bUseExternalSchemaDatabase = false;
 
     /**
      * Global PICD schema registry.
@@ -211,12 +213,12 @@ public:
      * Editor: displayed as an editable map with a custom detail panel.
      * Entries here populate the dropdown in UISMInstanceDataAsset.
      */
-    UPROPERTY(Config, EditAnywhere, Category = "PICD Schemas", meta = (DisplayName = "PICD Schema Registry", ToolTip = "Define your project's PICD channel mapping schemas here.\n Each schema is identified by an FName key and can be referenced \n from any ISM Instance Data Asset."))
+    UPROPERTY(Config, EditAnywhere, Category = "PICD Schemas", meta = (DisplayName = "PICD Schema Registry", 
+        ToolTip = "Define your project's PICD channel mapping schemas here.\n Each schema is identified by an FName key and can be referenced \n from any ISM Instance Data Asset.", EditCondition = "!bUseExternalSchemaDatabase", EditConditionHides))
     TMap<FName, FISMCustomDataSchema> SchemaRegistry;
 
 
-	bool bUseExternalSchemaDatabase = true;
-    UPROPERTY(Config, EditAnywhere, Category = "PICD Schemas", meta = (DisplayName = "PICD Schema Registry",ToolTip = ""))
+    UPROPERTY(Config, EditAnywhere, Category = "PICD Schemas", meta = (DisplayName = "PICD Schema Registry", ToolTip = "", EditCondition = "bUseExternalSchemaDatabase", EditConditionHides))
     TSoftObjectPtr<UDataTable> HandlerDatabase;
 
 
@@ -269,7 +271,7 @@ public:
     /** True if a schema with the given name exists in the registry */
     bool HasSchema(FName SchemaName) const 
     { 
-        if(!bUseExternalSchemaDatabase && HandlerDatabase.IsValid())
+        if(!bUseExternalSchemaDatabase || !HandlerDatabase.IsValid())
         {
             return SchemaRegistry.Contains(SchemaName);
         }

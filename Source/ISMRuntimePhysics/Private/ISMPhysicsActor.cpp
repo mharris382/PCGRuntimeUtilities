@@ -97,7 +97,18 @@ void AISMPhysicsActor::Tick(float DeltaTime)
 		UE_LOG(LogTemp, Warning, TEXT("[%s] Tick - No valid physics data!"), *GetName());
         return;
     }
-    
+
+    if (ShouldBeKinematic() != bIsKinematic)
+    {
+        if (bIsKinematic)
+        {
+            StartSimulatingPhysics();
+        }
+        else 
+        {
+            StopSimulatingPhysics();
+        }
+    }
     
     // Update resting detection
     UpdateRestingDetection(DeltaTime);
@@ -185,7 +196,7 @@ void AISMPhysicsActor::OnRequestedFromPool_Implementation(UISMPoolDataAsset* Dat
 		check(!bIsKinematicInitted);//should always be false at this point - if true, means we somehow got here twice without returning to pool, which would be a bug
         bIsKinematicInitted = false;
 
-        if (ShouldStartKinematic())
+        if (ShouldBeKinematic())
         {
             StopSimulatingPhysics();
             UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("[%s] Started in KINEMATIC mode"), *GetName());
@@ -413,7 +424,7 @@ void AISMPhysicsActor::ApplyVisualSettings(UISMPhysicsDataAsset* PhysicsDataAsse
 
 #pragma region SIMULATION_CONTROLS
 
-bool AISMPhysicsActor::ShouldStartKinematic_Implementation() const { return false; }
+bool AISMPhysicsActor::ShouldBeKinematic_Implementation() const { return false; }
 
 bool AISMPhysicsActor::IsKinematic() const { return bIsKinematic; }
 

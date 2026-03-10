@@ -186,8 +186,8 @@ public:
 #pragma region SIMULATION_CONTROL
 
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "ISM Physics")
-    bool ShouldStartKinematic() const;
-    virtual bool ShouldStartKinematic_Implementation() const;
+    bool ShouldBeKinematic() const;
+    virtual bool ShouldBeKinematic_Implementation() const;
 
     /**
      * Check if currently in kinematic mode (not simulating).

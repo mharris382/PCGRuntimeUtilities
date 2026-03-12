@@ -97,7 +97,18 @@ void AISMPhysicsActor::Tick(float DeltaTime)
 		UE_LOG(LogTemp, Warning, TEXT("[%s] Tick - No valid physics data!"), *GetName());
         return;
     }
-    
+
+    if (ShouldBeKinematic() != bIsKinematic)
+    {
+        if (bIsKinematic)
+        {
+            StartSimulatingPhysics();
+        }
+        else 
+        {
+            StopSimulatingPhysics();
+        }
+    }
     
     // Update resting detection
     UpdateRestingDetection(DeltaTime);
@@ -185,15 +196,15 @@ void AISMPhysicsActor::OnRequestedFromPool_Implementation(UISMPoolDataAsset* Dat
 		check(!bIsKinematicInitted);//should always be false at this point - if true, means we somehow got here twice without returning to pool, which would be a bug
         bIsKinematicInitted = false;
 
-        if (ShouldStartKinematic())
+        if (ShouldBeKinematic())
         {
-			StartSimulatingPhysics(FVector::ZeroVector, FVector::ZeroVector);
+            StopSimulatingPhysics();
             UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("[%s] Started in KINEMATIC mode"), *GetName());
+            // Normal mode: Simulate immediately
         }
         else
         {
-            // Normal mode: Simulate immediately
-            StopSimulatingPhysics();
+			StartSimulatingPhysics(FVector::ZeroVector, FVector::ZeroVector);
             UE_LOG(LogISMRuntimePhysics, Verbose, TEXT("[%s] Started SIMULATING physics"), *GetName());
         }
 
@@ -413,7 +424,7 @@ void AISMPhysicsActor::ApplyVisualSettings(UISMPhysicsDataAsset* PhysicsDataAsse
 
 #pragma region SIMULATION_CONTROLS
 
-bool AISMPhysicsActor::ShouldStartKinematic_Implementation() const { return false; }
+bool AISMPhysicsActor::ShouldBeKinematic_Implementation() const { return false; }
 
 bool AISMPhysicsActor::IsKinematic() const { return bIsKinematic; }
 
@@ -421,10 +432,6 @@ bool AISMPhysicsActor::IsKinematic() const { return bIsKinematic; }
 void AISMPhysicsActor::StartSimulatingPhysics(FVector InitialVelocity, FVector InitialAngularVelocity)
 {
     if (!MeshComponent)return;
-    if((bIsKinematicInitted && !bIsKinematic))
-    {
-        return; // Already simulating
-	}
 	bIsKinematic = false;
 	bIsKinematicInitted = true;
     MeshComponent->SetSimulatePhysics(true);
@@ -435,10 +442,6 @@ void AISMPhysicsActor::StartSimulatingPhysics(FVector InitialVelocity, FVector I
 void AISMPhysicsActor::StopSimulatingPhysics()
 {
     if (!MeshComponent)return;
-    if((bIsKinematicInitted && bIsKinematic))
-    {
-        return; // Already kinematic
-	}
 	bIsKinematic = true;
 	bIsKinematicInitted = true;
     MeshComponent->SetSimulatePhysics(false);

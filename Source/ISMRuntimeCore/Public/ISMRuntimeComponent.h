@@ -41,7 +41,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnInstanceAttachmentChanged, clas
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInstanceReleased, class UISMRuntimeComponent*, Component, int32, InstanceIndex);
 
 
-
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnBatchInstancesAddedNative, class UISMRuntimeComponent*, const TArray<int32>&);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnInstanceAddedNative, class UISMRuntimeComponent*, int32);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnInstanceStateChangedNative, class UISMRuntimeComponent*, int32);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnInstanceDestroyedNative, class UISMRuntimeComponent*, int32);
 
@@ -438,6 +439,8 @@ public:
     FOnInstanceTagsChangedNative OnInstanceTagsChangedNative;
 
     /** Native C++ delegates (no Blueprint overhead) */
+    FOnBatchInstancesAddedNative OnBatchInstancesAddedNative;
+    FOnInstanceAddedNative OnInstanceAddedNative;
     FOnInstanceStateChangedNative OnInstanceStateChangedNative;
     FOnInstanceDestroyedNative OnInstanceDestroyedNative;
 
@@ -566,7 +569,8 @@ protected:
     /** Get effective tags for an instance (component + per-instance) */
     FGameplayTagContainer GetEffectiveTagsForInstance(int32 InstanceIndex) const;
 
-    
+    void BroadcastBatchedInstancesAdded(const TArray<int32>& Instances);
+    void BroadcastInstanceAdded(int32 InstanceIndex);
     /** Broadcast state change event */
     void BroadcastStateChange(int32 InstanceIndex);
     
@@ -582,6 +586,7 @@ protected:
         void BroadcastPossessionChange(int32 InstanceIndex);
         void BroadcastAttachmentChange(int32 InstanceIndex);
         void BroadcastInstanceReleased(int32 InstanceIndex);
+    
 
     /** Get or create a handle for an instance */
     FISMInstanceHandle& GetOrCreateHandle(int32 InstanceIndex);

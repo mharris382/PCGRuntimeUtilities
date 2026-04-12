@@ -589,6 +589,7 @@ TArray<int32> UISMRuntimeComponent::BatchAddInstances(const TArray<FTransform>& 
 
         // Notify subclass
         OnInstanceAdded(NewIndex, Transform);
+        
 
         NewIndices.Add(NewIndex);
     }
@@ -606,7 +607,7 @@ TArray<int32> UISMRuntimeComponent::BatchAddInstances(const TArray<FTransform>& 
             bBoundsValid = true;
         }
     }
-
+    BroadcastBatchedInstancesAdded(NewIndices);
     UE_LOG(LogTemp, Verbose, TEXT("ISMRuntimeComponent: Batch added %d instances"), NewIndices.Num());
 
     return NewIndices;
@@ -968,6 +969,7 @@ FGameplayTagContainer UISMRuntimeComponent::GetEffectiveTagsForInstance(int32 In
 
     return EffectiveTags;
 }
+
 
 // ===== Custom Data =====
 
@@ -1568,6 +1570,18 @@ bool UISMRuntimeComponent::IsValidInstanceIndex(int32 InstanceIndex) const
         InstanceIndex < ManagedISMComponent->GetInstanceCount();
 }
 
+void UISMRuntimeComponent::BroadcastBatchedInstancesAdded(const TArray<int32>& Instances)
+{
+    OnBatchInstancesAddedNative.Broadcast(this, Instances);
+}
+
+void UISMRuntimeComponent::BroadcastInstanceAdded(int32 InstanceIndex)
+{
+    if (!IsValidInstanceIndex(InstanceIndex)){
+        return;
+    }
+    OnInstanceAddedNative.Broadcast(this,InstanceIndex);
+}
 void UISMRuntimeComponent::BroadcastStateChange(int32 InstanceIndex)
 {
     if (!IsValidInstanceIndex(InstanceIndex)) {

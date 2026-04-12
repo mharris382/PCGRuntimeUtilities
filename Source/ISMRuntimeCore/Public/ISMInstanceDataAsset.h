@@ -54,14 +54,14 @@ public:
     // ===== Visual Settings =====
     
     /** Static mesh to use for instances */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Identity")
     UStaticMesh* StaticMesh;
 
 
 	UStaticMesh* GetStaticMesh() const { return StaticMesh; }
 
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Identity")
 	TArray<UMaterialInterface*> MaterialOverrides;
 
 	TArray<UMaterialInterface*> GetMaterialOverrides() const { return MaterialOverrides; }

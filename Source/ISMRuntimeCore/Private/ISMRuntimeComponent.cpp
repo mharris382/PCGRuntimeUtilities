@@ -144,6 +144,8 @@ bool UISMRuntimeComponent::InitializeInstances()
         State.LastUpdateFrame = GFrameCounter;
         State.CachedTransform = InstanceTransform;
         State.bTransformCached = true;
+        State.LastVisibleTransform = InstanceTransform;
+        State.bHasLastVisibleTransform = (InstanceTransform.GetScale3D() != FVector::ZeroVector);
     }
 
     // Build spatial index from all instances
@@ -321,8 +323,12 @@ void UISMRuntimeComponent::HideInstance(int32 InstanceIndex, bool bUpdateBounds,
         return;
     }
     
+    FTransform CurrentTransform;
+    ManagedISMComponent->GetInstanceTransform(InstanceIndex, CurrentTransform, true);
+
     // Already hidden?
-    if (State->HasFlag(EISMInstanceState::Hidden))
+    if (State->HasFlag(EISMInstanceState::Hidden)  
+        && CurrentTransform.GetScale3D() == FVector::ZeroVector)
     {
         return;
     }
@@ -334,13 +340,18 @@ void UISMRuntimeComponent::HideInstance(int32 InstanceIndex, bool bUpdateBounds,
     // Mark as hidden
     State->SetFlag(EISMInstanceState::Hidden, true);
     
+    // Preserve the current visible transform so ShowInstance can restore it later.
+    if (CurrentTransform.GetScale3D() != FVector::ZeroVector)
+    {
+        State->LastVisibleTransform = CurrentTransform;
+        State->bHasLastVisibleTransform = true;
+    }
+
     // Scale to zero
-    FTransform HiddenTransform;
-    ManagedISMComponent->GetInstanceTransform(InstanceIndex, HiddenTransform, true);
+    FTransform HiddenTransform = CurrentTransform;
     HiddenTransform.SetScale3D(FVector::ZeroVector);
     
     ManagedISMComponent->UpdateInstanceTransform(InstanceIndex, HiddenTransform, true, true);
-    
     State->CachedTransform = HiddenTransform;
     State->bTransformCached = true;
     
@@ -369,24 +380,35 @@ void UISMRuntimeComponent::ShowInstance(int32 InstanceIndex, bool bUpdateBounds,
         return;
     }
     
+    FTransform CurrentTransform;
+    ManagedISMComponent->GetInstanceTransform(InstanceIndex, CurrentTransform, true);
+
     // Not hidden?
-    if (!State->HasFlag(EISMInstanceState::Hidden))
+    if (!State->HasFlag(EISMInstanceState::Hidden) && 
+        CurrentTransform.GetScale3D() != FVector::ZeroVector)
     {
         return;
     }
     
     // Mark as not hidden
     State->SetFlag(EISMInstanceState::Hidden, false);
-    
-    // Restore scale (assume scale of 1,1,1 - could cache original scale if needed)
-    FTransform VisibleTransform;
-    ManagedISMComponent->GetInstanceTransform(InstanceIndex, VisibleTransform, true);
-    VisibleTransform.SetScale3D(State->CachedTransform.GetScale3D());
+
+    // Restore the pre-hide transform that HideInstance preserved.
+    FTransform VisibleTransform = State->bHasLastVisibleTransform
+        ? State->LastVisibleTransform
+        : CurrentTransform;
+
+    if (VisibleTransform.GetScale3D() == FVector::ZeroVector)
+    {
+        VisibleTransform.SetScale3D(FVector::OneVector);
+    }
     
     ManagedISMComponent->UpdateInstanceTransform(InstanceIndex, VisibleTransform, true, true);
     
     State->CachedTransform = VisibleTransform;
     State->bTransformCached = true;
+    State->LastVisibleTransform = VisibleTransform;
+    State->bHasLastVisibleTransform = true;
     
     BroadcastStateChange(InstanceIndex);
     
@@ -421,6 +443,11 @@ void UISMRuntimeComponent::UpdateInstanceTransform(int32 InstanceIndex, const FT
     {
         State->CachedTransform = NewTransform;
         State->bTransformCached = true;
+        if (NewTransform.GetScale3D() != FVector::ZeroVector)
+        {
+            State->LastVisibleTransform = NewTransform;
+            State->bHasLastVisibleTransform = true;
+        }
         State->LastUpdateFrame = GFrameCounter;
     }
     
@@ -632,6 +659,8 @@ void UISMRuntimeComponent::InitializeNewInstance(int32 InstanceIndex, const FTra
     State.LastUpdateFrame = GFrameCounter;
     State.CachedTransform = Transform;
     State.bTransformCached = true;
+    State.LastVisibleTransform = Transform;
+    State.bHasLastVisibleTransform = (Transform.GetScale3D() != FVector::ZeroVector);
 
     // Start as intact
     State.SetFlag(EISMInstanceState::Intact, true);
@@ -779,15 +808,6 @@ FTransform UISMRuntimeComponent::GetInstanceTransform(int32 InstanceIndex) const
     if (!IsValidInstanceIndex(InstanceIndex))
     {
         return FTransform::Identity;
-    }
-
-    // Check cache first
-    if (const FISMInstanceState* State = InstanceStates.Find(InstanceIndex))
-    {
-        if (State->bTransformCached)
-        {
-            return State->CachedTransform;
-        }
     }
 
     // Get from ISM
@@ -1191,6 +1211,13 @@ FISMInstanceState* UISMRuntimeComponent::GetInstanceStateMutable(int32 InstanceI
 {
     return InstanceStates.Find(InstanceIndex);
 }
+
+const FISMInstanceState UISMRuntimeComponent::GetInstanceStateConst(int32 InstanceIndex) const
+{
+    return *InstanceStates.Find(InstanceIndex);
+}
+
+
 
 #pragma region AABB_QUERIES
 

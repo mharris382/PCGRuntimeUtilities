@@ -46,17 +46,6 @@ class UISMRuntimeComponent;
 //};
 //
 ///**
- * Stateless translation bridge between ISM Runtime and PCG.
- * This is the API that other modules import and use.
- *
- * All functions are static - no state lives here.
- * The bridge is a pure translator: it does not own data,
- * does not make gameplay decisions, and does not know
- * what the data means semantically.
- *
- * Other modules (ISMRuntimePhysics, ISMRuntimeAnimation, etc.)
- * call into this to serialize/deserialize their instances to/from PCG.
- */
 //UCLASS()
 //class ISMRUNTIMEPCGINTEROP_API UISMPCGBridge : public UObject
 //{

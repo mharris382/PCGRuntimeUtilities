@@ -339,11 +339,19 @@ public:
 
     virtual uint8 GetInstanceStateFlags(int32 InstanceIndex) const override;
     virtual bool IsInstanceInState(int32 InstanceIndex, EISMInstanceState State) const override;
-    virtual void SetInstanceState(int32 InstanceIndex, EISMInstanceState State, bool bValue) override;
     virtual const FISMInstanceState* GetInstanceState(int32 InstanceIndex) const override;
-
+    
+    ///Sets the instance state FLAG, but DOES NOT actually apply hide/show/destroy changes.  use HideInstance,ShowInstance,DestroyInstance instead 
+    virtual void SetInstanceState(int32 InstanceIndex, EISMInstanceState State, bool bValue) override;
+    
     /** Get mutable instance state (non-const version) */
     FISMInstanceState* GetInstanceStateMutable(int32 InstanceIndex);
+    
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Query")
+    const FISMInstanceState GetInstanceStateConst(int32 InstanceIndex) const;
+    
+    UFUNCTION(BlueprintCallable, Category = "ISM Runtime|Query")
+    bool IsInstanceHidden(int32 InstanceIndex) const { return IsInstanceInState(InstanceIndex, EISMInstanceState::Hidden); }
 
 #pragma endregion
 

@@ -43,6 +43,12 @@ struct ISMRUNTIMECORE_API FISMInstanceState
     /** Whether cached transform is valid */
     bool bTransformCached = false;
 
+    /** Last non-hidden transform, used to restore an instance after HideInstance(). */
+    FTransform LastVisibleTransform;
+
+    /** Whether LastVisibleTransform contains a valid pre-hide transform. */
+    bool bHasLastVisibleTransform = false;
+
     /** World-space AABB for this instance. Only valid when owning component has bComputeInstanceAABBs = true. */
     FBox WorldBounds;
 

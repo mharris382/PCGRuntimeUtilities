@@ -8,6 +8,7 @@
 
 #include "Interfaces/ISMPickupInterface.h"
 #include "Delegates/DelegateCombinations.h"
+#include "ISMInteractionComponent.h"
 #include "ISMSimplePickup.generated.h"
 
 class UISMInteractionComponent;

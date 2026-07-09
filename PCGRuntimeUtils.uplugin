@@ -18,6 +18,11 @@
   "EditorCustomVirtualPath": "ISMRuntime",
   "Modules": [
     {
+      "Name": "ISMRuntimeCore",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    },
+    {
       "Name": "ISMRuntimeDamage",
       "Type": "Runtime",
       "LoadingPhase": "Default"

@@ -3,7 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
-#include "ISMRuntimeSettings.h"
+#include "Settings/ISMRuntimeSettings.h"
 #include "ISMFeedbackHandlerDataAsset.h"
 #include "ISMFeedbackSettings.generated.h"
 

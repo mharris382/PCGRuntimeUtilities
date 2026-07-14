@@ -30,8 +30,7 @@ AISMPhysicsActor::AISMPhysicsActor()
     MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     MeshComponent->SetVisibility(false);
     
-    // Make transient so we don't save pooled actors
-    SetFlags(RF_Transient);
+    
 }
 
 

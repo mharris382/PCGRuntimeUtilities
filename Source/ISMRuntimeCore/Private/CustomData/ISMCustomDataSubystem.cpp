@@ -1,6 +1,6 @@
 // ISMCustomDataSubsystem.cpp
 #include "CustomData/ISMCustomDataSubsystem.h"
-
+#include "Settings/ISMRuntimeSchemaSettings.h"
 #include "ISMInstanceHandle.h"
 #include "ISMRuntimeComponent.h"
 #include "ISMInstanceDataAsset.h"

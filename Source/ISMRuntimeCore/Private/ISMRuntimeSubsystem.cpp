@@ -6,7 +6,7 @@
 #include "ISMInstanceHandle.h"
 #include "ISMInstanceState.h"
 #include "CollisionQueryParams.h"
-#include "ISMRuntimeSettings.h"
+#include "Settings/ISMRuntimeSettings.h"
 #include "Batching/ISMBatchScheduler.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "ISMQueryFilter.h"

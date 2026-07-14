@@ -2,6 +2,7 @@
 // Merge this into your existing ISMInstanceDataAsset.cpp
 
 #include "ISMInstanceDataAsset.h"
+#include "Settings/ISMRuntimeSchemaSettings.h"
 #include "Engine/StaticMesh.h"
 #include "CustomData/ISMCustomDataSchema.h"
 #include "Logging/LogMacros.h"

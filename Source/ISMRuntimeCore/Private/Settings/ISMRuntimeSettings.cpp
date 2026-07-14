@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Max Harris
 // Published by Procedural Architect
 
-#include "ISMRuntimeSettings.h"
+#include "Settings/ISMRuntimeSettings.h"
 
 
 
